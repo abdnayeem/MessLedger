@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, viewport-fit=cover">
+<meta name="theme-color" content="#0E6E5A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MessLedger — Meal &amp; Expense Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* Inline critical CSS so a loading state shows immediately, before the
+     external stylesheets above have even finished downloading. Without
+     this, the page is a truly blank white screen until fonts.googleapis.com,
+     cdnjs (Font Awesome), and css/style.css all finish loading — which is
+     exactly the "5 seconds of white screen" being seen. */
+  html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
+  html,body{background:#F6F7F4; margin:0; width:100%; overflow-x:hidden;}
+  #boot-loader{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:#F6F7F4; font-family:sans-serif; z-index:99999;}
+  #boot-loader .spin{width:34px; height:34px; border:3px solid #E1E6DF; border-top-color:#0E6E5A; border-radius:50%; animation:boot-spin .8s linear infinite;}
+  #boot-loader .txt{color:#4A5750; font-size:13.5px;}
+  @keyframes boot-spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="boot-loader"><div class="spin"></div><div class="txt">Loading MessLedger…</div></div>
+<div id="app">
+  <div id="toast-container" class="toast-container"></div>
+  <div id="login-screen"></div>
+  <div id="main-screen">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-dot">M</div>
+        <div class="brand-text">
+          <h1>MessLedger</h1>
+          <div class="sub">Meal &amp; expense tracker</div>
+        </div>
+      </div>
+      <div class="who" id="who-box"></div>
+    </header>
+
+    <div class="month-bar">
+      <label for="month-select"><i class="fas fa-calendar-week"></i> Viewing month</label>
+      <input type="month" id="month-select">
+    </div>
+
+    <div class="layout">
+      <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+      <main class="content-wrap">
+        <div id="content"></div>
+      </main>
+    </div>
+    <div class="bottom-nav-spacer" aria-hidden="true"></div>
+  </div>
+</div>
+
+<!-- Firebase SDKs (compat build — plain <script> tags, no bundler needed) -->
+<script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+
+<!-- App files, in order: config → storage adapter → app logic. defer preserves this order. -->
+<script defer src="js/firebase-config.js"></script>
+<script defer src="js/storage.js"></script>
+<script defer src="js/app/00-utils-core.js"></script>
+<script defer src="js/app/01-notifications.js"></script>
+<script defer src="js/app/02-state-storage.js"></script>
+<script defer src="js/app/03-persistence.js"></script>
+<script defer src="js/app/04-format-helpers.js"></script>
+<script defer src="js/app/05-session-sync.js"></script>
+<script defer src="js/app/06-auth.js"></script>
+<script defer src="js/app/07-ui-shell.js"></script>
+<script defer src="js/app/08-calculations.js"></script>
+<script defer src="js/app/09-dashboard.js"></script>
+<script defer src="js/app/10-meals.js"></script>
+<script defer src="js/app/11-reports.js"></script>
+<script defer src="js/app/12-history.js"></script>
+<script defer src="js/app/13-costs.js"></script>
+<script defer src="js/app/14-expenses.js"></script>
+<script defer src="js/app/15-deposits.js"></script>
+<script defer src="js/app/16-members.js"></script>
+<script defer src="js/app/17-logs.js"></script>
+<script defer src="js/app/18-settings-admin.js"></script>
+<script defer src="js/app/19-backup-testdata.js"></script>
+<script defer src="js/app/20-bootstrap.js"></script>
+<script defer src="js/responsive-tables.js"></script>
+</body>
+</html>
