@@ -2,6 +2,22 @@
 // 02-state-storage.js  (originally app.js lines 482-1019)
 // Default settings, local cache read/write, storage key constants, admin month-access rules, state defaults/migration, Firestore doc assembly, loadState()
 // ---------------------------------------------------------------------------
+// BUGFIX (partial state silently overwriting the full local cache): `state`
+// can now briefly hold only the lightweight login-screen data (members/
+// settings/meta/monthlyActive — see fetchLoginScreenState() below) before a
+// session exists — e.g. while sitting on the login screen, or right after a
+// failed login attempt. persistMembers() (03-persistence.js) can run in
+// that exact window (a wrong-PIN attempt or account lockout both call it),
+// and _markEdited() used to unconditionally write whatever `state` is to
+// the local cache — which would replace a previously-good FULL cached
+// snapshot with this near-empty one, so an offline reload afterwards would
+// show an alarming "all data is gone" screen even though nothing was
+// actually lost server-side. This flag is only true once `state` genuinely
+// holds the complete dataset (set in loadState(), enterAppWithFullData(),
+// applyFreshState(), and the offline-cache-fallback path in init()) —
+// _markEdited() checks it before writing to cache.
+let _hasFullState = false;
+
 function defaultSettings() {
   return {
     mealLockHour: 11,
@@ -502,6 +518,70 @@ function buildStateFromItems(items) {
   fillStateDefaults(s);
   return s;
 }
+// BUGFIX (full-collection read for every visitor, even ones who never log
+// in): loadState()/the realtime listener both read the ENTIRE
+// mealAppStorage collection — every day's meals, every deposit/expense/
+// cost, every log — which is only actually needed once someone is signed
+// in. But init() used to fetch all of that just to decide what to show on
+// the *login screen*, so simply opening the site and not logging in still
+// cost a full collection read (and, before this fix, kept a live listener
+// open racking up further reads for as long as the tab sat idle there).
+//
+// The login screen and login-attempt validation (doLogin() in 06-auth.js)
+// only ever touch: the member list+PINs (KEY_MEMBERS), the recovery code
+// (KEY_META), and monthly-active records (PFX_MONTHLYACTIVE, for the
+// "you're marked inactive this month" check) — never the day/deposit/
+// expense/cost/log data. This fetches only those, as a one-time (not
+// live) read, so an idle or never-logging-in visitor costs a handful of
+// small document reads instead of the whole dataset. The full listener
+// (ensureRealtimeListener()/waitForFirstSnapshot() in 05-session-sync.js)
+// only gets opened once someone actually has a session — see enterAppFull()
+// below and doLogin()'s success path.
+async function fetchLoginScreenState() {
+  let membersRes;
+  try {
+    membersRes = await storage.get(KEY_MEMBERS, true);
+  } catch (e) {
+    // BUGFIX: a mess that hasn't finished migrating from the old
+    // single-document format yet has no KEY_MEMBERS per-item doc at all —
+    // storage.get() above throws "Key not found", which used to just
+    // break the login screen outright. loadState() already knows how to
+    // detect and run that one-time migration (see migrateFromSingleDoc()
+    // above), so fall back to it here; this only ever costs the full read
+    // on a mess that genuinely still needs migrating, which should be
+    // rare/one-time, not the normal case.
+    return await loadState();
+  }
+  const [metaRes, settingsRes, monthlyRes] = await Promise.all([
+    storage.get(KEY_META, true).catch(() => null),
+    storage.get(KEY_SETTINGS, true).catch(() => null),
+    (typeof storage.getByPrefix === 'function'
+      ? storage.getByPrefix(PFX_MONTHLYACTIVE, true)
+      : Promise.resolve({ items: [] })
+    ).catch(() => ({ items: [] }))
+  ]);
+  const s = {
+    members: JSON.parse(membersRes.value),
+    settings: settingsRes ? JSON.parse(settingsRes.value) : defaultSettings(),
+    recoveryCode: metaRes ? JSON.parse(metaRes.value).recoveryCode : generateRecoveryCode(),
+    testDataBackup: null,
+    memberSnapshots: [],
+    days: {},
+    costs: [],
+    deposits: [],
+    expenses: [],
+    loginLogs: [],
+    actionLogs: [],
+    monthlyActive: {},
+    notifications: []
+  };
+  (monthlyRes.items || []).forEach(it => {
+    s.monthlyActive[it.key.slice(PFX_MONTHLYACTIVE.length)] = JSON.parse(it.value);
+  });
+  fillStateDefaults(s);
+  return s;
+}
+
 async function loadState() {
   // NOTE ON A PAST DATA-LOSS INCIDENT: this function used to (a) treat any
   // empty read from Firestore as "brand new mess" and immediately overwrite
@@ -536,6 +616,7 @@ async function loadState() {
   }
 
   const s = buildStateFromItems(all.items);
+  _hasFullState = true;
   writeLocalCache(s);
   return s;
 }

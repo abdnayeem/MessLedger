@@ -214,6 +214,7 @@ function applyFreshState(fresh, force) {
     fresh.notifications = fresh.notifications.filter(n => !_pendingDeletedNotifIds.has(n.id));
   }
   state = fresh;
+  _hasFullState = true; // listener snapshots are always the full dataset — see 02-state-storage.js
   // The memo cache is keyed by memberId/month, not by "which state object"
   // it was computed from — so after swapping in fresh data here, any
   // previously-cached figures (balance, summary totals, etc.) are stale
@@ -248,27 +249,127 @@ function applyFreshState(fresh, force) {
 }
 let _snapshotUnsub = null;
 
+// BUGFIX (double full-collection read on every boot/login): this app used
+// to (a) do a one-time storage.getAll() in loadState() during init(), and
+// then (b) call startRealtimeSync() from enterApp() a moment later, whose
+// onSnapshotAll() ALSO fetches every document as its "first snapshot" —
+// i.e. the entire collection was read from Firestore twice, back to back,
+// for the exact same data, on every single login/session-restore. That's
+// double the load time and double the billed Firestore reads for no benefit.
+//
+// Fix: the listener is now started once, as early as possible (from
+// init(), before login), via ensureRealtimeListener()/waitForFirstSnapshot()
+// below. Its first snapshot IS the boot data — there's no separate
+// storage.getAll() anymore. By the time enterApp() calls startRealtimeSync()
+// after login, _snapshotUnsub is already set, so it's a no-op: no second
+// listener, no second read.
+let _firstSnapshotSeen = false;
+let _bootSnapshotItems = null;
+let _bootSnapshotResolvers = [];
+let _bootSnapshotRejecters = [];
+let _listenerRetryCount = 0; // resets to 0 once a listener actually succeeds
+
+function ensureRealtimeListener() {
+  if (_snapshotUnsub) return; // already listening — boot or otherwise
+  if (typeof storage.onSnapshotAll !== 'function') {
+    // Deployed storage.js predates onSnapshotAll() — nothing to attach to.
+    // waitForFirstSnapshot() below falls back to a normal one-time fetch,
+    // and startRealtimeSync() falls back to polling, same as before.
+    return;
+  }
+  _snapshotUnsub = storage.onSnapshotAll((items) => {
+    // BUGFIX ("Member data (KEY_MEMBERS) was not found" right after a real
+    // login): a freshly-attached full-collection listener can fire its
+    // very first callback with an INCOMPLETE result — the SDK's local
+    // cache serving whatever it already has before the server's complete
+    // answer arrives, arriving more than the 100ms debounce apart from the
+    // real one (see onSnapshotAll() in storage.js). Every consumer here
+    // assumes a snapshot represents the WHOLE collection, so treating that
+    // partial one as final threw. A genuinely complete snapshot always
+    // includes the members doc, so use that as the sanity check: skip and
+    // wait for the next (complete) snapshot instead of failing on this one.
+    const looksComplete = items.some(it => it.key === KEY_MEMBERS);
+    if (!looksComplete) {
+      console.warn('Realtime listener: skipping incomplete snapshot (no members doc yet), waiting for the next one');
+      return;
+    }
+    _listenerRetryCount = 0; // got real data — any earlier hiccup is behind us
+    _bootSnapshotItems = items;
+    if (!_firstSnapshotSeen) {
+      _firstSnapshotSeen = true;
+      _bootSnapshotResolvers.forEach(res => res(items));
+      _bootSnapshotResolvers = [];
+      _bootSnapshotRejecters = [];
+    }
+    if (!session.userId) return; // not signed in yet — nothing to repaint
+    const fresh = buildStateFromItems(items);
+    applyFreshState(fresh, true);
+  }, true, (err) => {
+    console.error('Realtime listener failed:', err);
+    _snapshotUnsub = null;
+    // BUGFIX: establishing the FIRST realtime listener of a session opens a
+    // fresh streaming connection (unlike the plain one-off reads
+    // fetchLoginScreenState() already made successfully), and can hit a
+    // one-off transient hiccup on the very first attempt — this used to
+    // reject immediately, surfacing "could not load your data" right after
+    // a successful login even though simply retrying (e.g. clicking Sign
+    // In again) always worked. Retry a couple of times with a short
+    // backoff, same pattern as the anonymous sign-in retry in
+    // firebase-config.js, before actually giving up and telling the caller.
+    if (!_firstSnapshotSeen && _listenerRetryCount < 2) {
+      _listenerRetryCount++;
+      setTimeout(() => ensureRealtimeListener(), 800 * _listenerRetryCount);
+      return;
+    }
+    _listenerRetryCount = 0;
+    if (!_firstSnapshotSeen) {
+      _bootSnapshotRejecters.forEach(rej => rej(err));
+      _bootSnapshotResolvers = [];
+      _bootSnapshotRejecters = [];
+    }
+    if (session.userId) startAutoSync();
+  });
+}
+
+// Resolves with the raw {key,value} items from the listener's very first
+// (complete) snapshot, starting the listener if it isn't already running.
+// Used by init() so the app's startup load and the realtime listener share
+// ONE Firestore read instead of two (see BUGFIX note above).
+function waitForFirstSnapshot() {
+  ensureRealtimeListener();
+  if (typeof storage.onSnapshotAll !== 'function') {
+    return Promise.reject(new Error('onSnapshotAll not available'));
+  }
+  if (_firstSnapshotSeen) return Promise.resolve(_bootSnapshotItems);
+  return new Promise((resolve, reject) => {
+    // Safety net: a complete snapshot should normally arrive within a
+    // couple of seconds even accounting for the incomplete-snapshot skip
+    // and the retry backoff above. If something genuinely never delivers
+    // one, fail with a clear message instead of leaving the caller (e.g.
+    // doLogin()'s "Signing in…" state) waiting forever with no feedback.
+    const wrappedResolve = (items) => { clearTimeout(timeoutId); resolve(items); };
+    const wrappedReject = (err) => { clearTimeout(timeoutId); reject(err); };
+    const timeoutId = setTimeout(() => {
+      const idx = _bootSnapshotResolvers.indexOf(wrappedResolve);
+      if (idx !== -1) {
+        _bootSnapshotResolvers.splice(idx, 1);
+        _bootSnapshotRejecters.splice(idx, 1);
+      }
+      reject(new Error('Timed out waiting for data from Firestore. Check your connection and try again.'));
+    }, 15000);
+    _bootSnapshotResolvers.push(wrappedResolve);
+    _bootSnapshotRejecters.push(wrappedReject);
+  });
+}
+
 function startRealtimeSync() {
-  if (_snapshotUnsub) return; // already listening
+  if (_snapshotUnsub) return; // already listening (e.g. started at boot)
   if (typeof storage.onSnapshotAll !== 'function') {
     // Deployed storage.js predates onSnapshotAll() — fall back to polling.
     startAutoSync();
     return;
   }
-  let firstSnapshot = true;
-  _snapshotUnsub = storage.onSnapshotAll((items) => {
-    if (!session.userId) return; // not signed in yet — ignore for now
-    const fresh = buildStateFromItems(items);
-    // The very first callback fires immediately on subscribe with data we
-    // may have already loaded a moment ago during login — apply it, but
-    // there's no need to force a jarring re-render if nothing's changed.
-    applyFreshState(fresh, !firstSnapshot ? true : false);
-    firstSnapshot = false;
-  }, true, (err) => {
-    console.error('Realtime listener failed, falling back to polling:', err);
-    _snapshotUnsub = null;
-    startAutoSync();
-  });
+  ensureRealtimeListener();
 }
 // Tears down whichever sync mechanism is currently active (live listener or
 // polling fallback). Called on logout so a signed-out tab stops reading
@@ -278,6 +379,16 @@ function stopRealtimeSync() {
     _snapshotUnsub();
     _snapshotUnsub = null;
   }
+  // BUGFIX: without resetting these, a logout -> login again in the same
+  // tab (no page reload) would make waitForFirstSnapshot() instantly
+  // resolve with the OLD snapshot cached from before logout — served up as
+  // if it were fresh — instead of waiting for the newly (re)started
+  // listener's actual first callback. Clearing them forces the next
+  // waitForFirstSnapshot() call to genuinely wait for new data again.
+  _firstSnapshotSeen = false;
+  _bootSnapshotItems = null;
+  _bootSnapshotResolvers = [];
+  _bootSnapshotRejecters = [];
   if (_autoSyncInterval) {
     clearInterval(_autoSyncInterval);
     _autoSyncInterval = null;

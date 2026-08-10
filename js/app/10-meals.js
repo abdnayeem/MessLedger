@@ -154,6 +154,12 @@ let mealsHistorySort = {
   dir: 'desc'
 };
 let mealsHistoryViewMode = 'month';
+// Persists the mobile "Load More — Show All Members" expand/collapse state for the
+// Meals tab's member list across re-renders (e.g. after Add Meal/Both/Rest/Edit/Update),
+// so a meal action doesn't silently re-collapse a list the admin already expanded.
+// Only reset back to false when the user explicitly collapses it (or leaves the tab —
+// see setActiveTab below), never as a side effect of a meal edit.
+let mealsRowsExpanded = false;
 
 function renderMeals() {
   const toggle = `
@@ -215,6 +221,7 @@ function toggleMealRowExtra() {
   const btn = document.getElementById('meal-row-loadmore-btn');
   if (!box) return;
   const expanded = box.classList.toggle('expanded');
+  mealsRowsExpanded = expanded; // remember explicit user choice across re-renders
   if (btn) btn.textContent = expanded ? '▲ Show Less' : '▼ Load More — Show All Members';
 }
 // If the viewport crosses the mobile/desktop boundary (e.g. device rotation,
@@ -337,8 +344,8 @@ function renderMealsEdit(headerHtml) {
     rows = `
       ${myRowEntry ? myRowEntry.html : ''}
       ${otherRowEntries.length ? `
-      <div id="meal-row-extra" class="member-stat-extra">${otherRowEntries.map(r=>r.html).join('')}</div>
-      <button type="button" id="meal-row-loadmore-btn" class="member-stat-loadmore-btn" onclick="toggleMealRowExtra()">▼ Load More — Show All Members</button>` : ''}
+      <div id="meal-row-extra" class="member-stat-extra${mealsRowsExpanded?' expanded':''}">${otherRowEntries.map(r=>r.html).join('')}</div>
+      <button type="button" id="meal-row-loadmore-btn" class="member-stat-loadmore-btn" onclick="toggleMealRowExtra()">${mealsRowsExpanded?'▲ Show Less':'▼ Load More — Show All Members'}</button>` : ''}
     `;
   } else {
     rows = rowEntries.map(r => r.html).join('');

@@ -268,15 +268,16 @@ function renderDashboard() {
       html: `
       <div class="member-stat-card">
         <div class="member-stat-name">${m.name} ${roleBadgeHtml(m)}${inactiveTag}</div>
-        <div class="stat-grid-2col">
-          <div class="stat-tile"><i class="fas fa-utensils"></i><div class="stat-tile-title">Meals</div><div class="stat-tile-value">${meals}</div></div>
-          <div class="stat-tile"><i class="fas fa-piggy-bank"></i><div class="stat-tile-title">Deposits</div><div class="stat-tile-value">${fmtMoney(dep)}</div></div>
-          <div class="stat-tile"><i class="fas fa-bowl-food"></i><div class="stat-tile-title">Meal Cost</div><div class="stat-tile-value">${fmtMoney(cost)}</div></div>
-          <div class="stat-tile"><i class="fas fa-receipt"></i><div class="stat-tile-title">Shared Expense</div><div class="stat-tile-value">${fmtMoney(expShare)}</div></div>
-          <div class="stat-tile"><i class="fas fa-wallet"></i><div class="stat-tile-title">Total Expense</div><div class="stat-tile-value">${fmtMoney(totalExpense)}</div></div>
-          <div class="stat-tile"><i class="fas fa-calculator"></i><div class="stat-tile-title">Personal Rate</div><div class="stat-tile-value">${personalRate!==null ? fmtMoney(personalRate) : '—'}</div></div>
-          <div class="stat-tile"><i class="fas fa-clock-rotate-left"></i><div class="stat-tile-title">Prior Balance</div><div class="stat-tile-value ${opening>=0?'pos':'neg'}">${opening>=0?'':'-'}${fmtMoney(Math.abs(opening))}</div></div>
-          <div class="stat-tile"><i class="fas fa-scale-balanced"></i><div class="stat-tile-title">Total Balance</div><div class="stat-tile-value ${grandTotal>=0?'pos':'neg'}" style="font-weight:800;">${grandTotal>=0?'':'-'}${fmtMoney(Math.abs(grandTotal))}</div></div>
+        <div class="stat-grid-2col" style="grid-template-columns:repeat(3,1fr); gap:6px;">
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-utensils"></i><div class="stat-tile-title">Meals</div><div class="stat-tile-value" style="font-size:12.5px;">${meals}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-bowl-food"></i><div class="stat-tile-title">Grocery Cost</div><div class="stat-tile-value" style="font-size:12.5px;">${fmtMoney(cost)}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-receipt"></i><div class="stat-tile-title">Shared Expense</div><div class="stat-tile-value" style="font-size:12.5px;">${fmtMoney(expShare)}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-wallet"></i><div class="stat-tile-title">Total Expense</div><div class="stat-tile-value" style="font-size:12.5px;">${fmtMoney(totalExpense)}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-piggy-bank"></i><div class="stat-tile-title">Deposits</div><div class="stat-tile-value" style="font-size:12.5px;">${fmtMoney(dep)}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-clock-rotate-left"></i><div class="stat-tile-title">Prior Balance</div><div class="stat-tile-value ${opening>=0?'pos':'neg'}" style="font-size:12.5px;">${opening>=0?'':'-'}${fmtMoney(Math.abs(opening))}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-layer-group"></i><div class="stat-tile-title">Dep+Prior</div><div class="stat-tile-value ${(dep+opening)>=0?'pos':'neg'}" style="font-size:12.5px;">${(dep+opening)>=0?'':'-'}${fmtMoney(Math.abs(dep+opening))}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-calculator"></i><div class="stat-tile-title">Personal Rate</div><div class="stat-tile-value" style="font-size:12.5px;">${personalRate!==null ? fmtMoney(personalRate) : '—'}</div></div>
+          <div class="stat-tile" style="padding:8px 6px;"><i class="fas fa-scale-balanced"></i><div class="stat-tile-title">Total Balance</div><div class="stat-tile-value ${grandTotal>=0?'pos':'neg'}" style="font-weight:800; font-size:12.5px;">${grandTotal>=0?'':'-'}${fmtMoney(Math.abs(grandTotal))}</div></div>
         </div>
       </div>`
     });
@@ -481,7 +482,7 @@ function renderDashboard() {
               <th class="num">Total Expense</th>
               <th class="num">Deposits</th>
               <th class="num">Prior Balance</th>
-              <th class="num">Dep+Carry</th>
+              <th class="num">Dep+Prior</th>
               <th class="num">Remaing Balance</th>
               <th class="num">Personal Rate</th>
             </tr>

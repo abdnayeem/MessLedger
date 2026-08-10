@@ -146,17 +146,35 @@ async function setTab(id) {
   if (id !== 'settings') _adminMonthAccessDraft = null; // force a fresh draft next time Settings is opened
   renderTabs();
   scrollContentToTop();
-  const c = document.getElementById('content');
-  if (c) {
-    c.innerHTML = '<div class="card empty"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading latest data…</div>';
+  // BUGFIX (full-collection Firestore read on every single tab click): this
+  // used to call loadState() here — a full re-fetch of the entire
+  // mealAppStorage collection — every time a tab was opened, even though
+  // the realtime listener (startRealtimeSync -> applyFreshState, see
+  // 05-session-sync.js) already keeps `state` continuously up to date in
+  // the background the whole time the app is open. That made every tab
+  // click cost as much as a full app reload, for data that was already
+  // current. `state` reflects the live listener's last snapshot (or the
+  // polling fallback's), so we can just render it directly.
+  //
+  // The one case that still needs an explicit fetch: the realtime sync
+  // isn't actually running (e.g. it failed to start and polling hasn't
+  // kicked in yet either) — then `state` could genuinely be stale, so fall
+  // back to a real fetch only in that situation.
+  const syncIsLive = (typeof _snapshotUnsub !== 'undefined' && _snapshotUnsub) ||
+    (typeof _autoSyncInterval !== 'undefined' && _autoSyncInterval);
+  if (!syncIsLive) {
+    const c = document.getElementById('content');
+    if (c) {
+      c.innerHTML = '<div class="card empty"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading latest data…</div>';
+    }
+    try {
+      state = await loadState();
+    } catch (e) {
+      console.error('Tab refresh failed:', e);
+      showToast('Could not refresh latest data — showing last known data.', 'error');
+    }
   }
-  try {
-    state = await loadState();
-    clearCalcCache();
-  } catch (e) {
-    console.error('Tab refresh failed:', e);
-    showToast('Could not refresh latest data — showing last known data.', 'error');
-  }
+  clearCalcCache();
   renderTabContent();
 }
 
