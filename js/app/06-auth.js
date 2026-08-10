@@ -40,6 +40,24 @@ function enterApp(m, opts) {
   if (m.pin === DEFAULT_PIN) showForcedPinChangeModal(m.id);
 }
 
+// `state` at this point may only be the lightweight login-screen data
+// (members/settings/meta/monthlyActive — see fetchLoginScreenState() in
+// 02-state-storage.js), not the full days/deposits/expenses/costs/logs a
+// signed-in session actually needs. This fetches the full data (via the
+// same realtime listener the app keeps running afterwards — see
+// waitForFirstSnapshot()/ensureRealtimeListener() in 05-session-sync.js,
+// so it's still only ONE full read, not an extra one on top of the live
+// listener) and only THEN calls enterApp(), so the dashboard never briefly
+// flashes empty/zeroed data. Throws on failure — callers decide how to
+// surface that (see doLogin() and paintFromState() below).
+async function enterAppWithFullData(m, opts) {
+  const items = await waitForFirstSnapshot();
+  state = validateState(buildStateFromItems(items));
+  _hasFullState = true; // see 02-state-storage.js — now safe for _markEdited() to cache `state`
+  writeLocalCache(state);
+  enterApp(m, opts);
+}
+
 /* ---------------- LOGIN ---------------- */
 function hideBootLoader() {
   const el = document.getElementById('boot-loader');
@@ -118,14 +136,31 @@ async function forgotPin() {
 async function doLogin() {
   const errBox = document.getElementById('login-error');
   errBox.textContent = '';
+  const loginBtn = document.getElementById('login-btn');
+  // Respond the instant the button is clicked — not just after all the
+  // validation checks below — so there's never a moment where clicking
+  // feels like it did nothing. Every early-return path below restores the
+  // button, so it's never stuck showing "Checking…" if login fails fast.
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Checking…';
+  }
+  const resetBtn = () => {
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign In';
+    }
+  };
   const m = resolveLoginMember(errBox);
-  if (!m) return;
+  if (!m) { resetBtn(); return; }
   if (m.accountDisabled) {
     errBox.textContent = `This account is disabled after ${MAX_LOGIN_ATTEMPTS} failed attempts. Ask your super admin to re-enable it, or use "Forgot PIN?" with the recovery code.`;
+    resetBtn();
     return;
   }
   if (m.role !== 'superadmin' && !isMemberActiveInMonth(m.id, realCurrentMonth())) {
     errBox.textContent = `You're marked inactive for ${realCurrentMonth()} by the super admin, so you can't log in this month. Ask them to reactivate you for a future month.`;
+    resetBtn();
     return;
   }
   const entered = document.getElementById('login-pin').value;
@@ -138,14 +173,17 @@ async function doLogin() {
         m.accountDisabled = true;
         await persistMembers();
         errBox.textContent = `Incorrect PIN. Account disabled after ${MAX_LOGIN_ATTEMPTS} failed attempts — ask your super admin to re-enable it.`;
+        resetBtn();
         return;
       }
       await persistMembers();
       const left = MAX_LOGIN_ATTEMPTS - m.failedLoginAttempts;
       errBox.textContent = `Incorrect PIN. ${left} attempt${left===1?'':'s'} left before this account is disabled.`;
+      resetBtn();
       return;
     }
     errBox.textContent = 'Incorrect PIN.';
+    resetBtn();
     return;
   }
   if (m.failedLoginAttempts) {
@@ -153,7 +191,17 @@ async function doLogin() {
     await persistMembers();
   }
   recordLoginLog(m);
-  enterApp(m);
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in…';
+  }
+  try {
+    await enterAppWithFullData(m);
+  } catch (err) {
+    console.error('Failed to load full data after login:', err);
+    errBox.textContent = 'Signed in, but could not load your data. Check your connection and try again.';
+    resetBtn();
+  }
 }
 // Best-effort browser/OS guess from the user agent string. Not exact (user
 // agents can be spoofed or blocked), but good enough for "which device".

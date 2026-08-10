@@ -68,6 +68,26 @@ const storage = {
     return { items, shared };
   },
 
+  // One-time (non-live) read of every document whose ID starts with
+  // `prefix`. Same range-query shape as onSnapshotByPrefix() below, but a
+  // single .get() instead of an open listener — used for small, bounded
+  // slices of data (like monthly-active records) where we want the data
+  // once, not a standing subscription that keeps costing reads while
+  // nobody's even looking at the page.
+  async getByPrefix(prefix, shared = false) {
+    await authReady;
+    const snap = await db.collection(STORAGE_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefix + '\uf8ff')
+      .get();
+    const items = [];
+    snap.forEach((doc) => {
+      const data = doc.data();
+      items.push({ key: doc.id, value: data.value, shared: data.shared });
+    });
+    return { items, shared };
+  },
+
   // Real-time version of getAll(): instead of one round trip, this opens a
   // live Firestore listener on the whole collection. `callback` fires
   // immediately with the current data, then again every time ANY document

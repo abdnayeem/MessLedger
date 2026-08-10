@@ -7,7 +7,11 @@ let _localEditedSinceBoot = false;
 function _markEdited() {
   _localEditedSinceBoot = true;
   clearCalcCache();
-  writeLocalCache(state);
+  // See _hasFullState in 02-state-storage.js: only cache `state` once it's
+  // confirmed to be the complete dataset, never the lightweight pre-login
+  // slice (which a failed-login persistMembers() call could otherwise
+  // overwrite the good cache with).
+  if (_hasFullState) writeLocalCache(state);
 }
 
 // ---- Pending-write tracking (fixes: "showed success but the data wasn't

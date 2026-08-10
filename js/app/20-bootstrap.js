@@ -3,7 +3,16 @@
 // paintFromState(), init(), injected custom styles, member-stat load-more toggle, and the two calls that actually start the app
 // ---------------------------------------------------------------------------
 
-function paintFromState() {
+// `haveFullState` tells us whether `state` already holds the full
+// days/deposits/expenses/costs/logs data (true — e.g. the offline local-
+// cache fallback below) or just the lightweight login-screen slice (false
+// — the normal path; see fetchLoginScreenState() in 02-state-storage.js).
+// A persisted-session auto-login needs the FULL data before it can safely
+// render the dashboard, so it only skips the extra fetch when we already
+// have it.
+function paintFromState(opts) {
+  opts = opts || {};
+  const haveFullState = !!opts.haveFullState;
   bindActivityTracking();
   const persisted = loadPersistedSession();
   if (persisted) {
@@ -18,36 +27,54 @@ function paintFromState() {
     // dropping this check doesn't let a stale role leak through; it just
     // stops punishing people for a role change with an unwanted logout.
     if (m) {
-      enterApp(m, {
-        persist: false,
-        expiresAt: persisted.expiresAt
-      });
+      const enterOpts = { persist: false, expiresAt: persisted.expiresAt };
+      if (haveFullState) {
+        enterApp(m, enterOpts);
+      } else {
+        enterAppWithFullData(m, enterOpts).catch(err => {
+          console.error('Failed to load full data for persisted session:', err);
+          showBootError('Could not load your data: ' + (err && err.message ? err.message : String(err)));
+        });
+      }
       return;
     }
     clearPersistedSession();
   }
   renderLogin();
 }
+
 async function init() {
-  // Always fetch the real, current data directly from Firestore first — no
-  // stale local copy is shown before it. The boot-loader spinner (already in
-  // index.html) stays up until this real fetch resolves, so what appears on
-  // screen is always accurate, never a flash of outdated data that then
-  // jumps/changes a moment later.
+  // BUGFIX (full-collection Firestore read for every visitor, even ones who
+  // never log in): boot used to fetch the ENTIRE mealAppStorage collection
+  // (every day's meals, every deposit/expense/cost, every log) just to
+  // decide what to show on the login screen — so simply opening the site,
+  // without logging in, cost a full read every time, and the realtime
+  // listener that fetch fed into stayed open racking up further reads for
+  // as long as the tab sat idle there. fetchLoginScreenState() (in
+  // 02-state-storage.js) fetches only what the login screen and login-
+  // attempt validation actually need — members, settings, recovery code,
+  // monthly-active records — nothing else, and as a one-time (not live)
+  // read. The full dataset is only fetched once someone actually has a
+  // session, via enterAppWithFullData() (06-auth.js) — see paintFromState()
+  // above and doLogin() in 06-auth.js.
   const bootTimeout = setTimeout(() => {
     showBootError('This is taking much longer than usual. Check your internet connection, or open the browser console (F12) for the actual error.');
   }, 10000);
   try {
-    const loadedState = await loadState();
+    const loadedState = await fetchLoginScreenState();
     state = validateState(loadedState);
+    _hasFullState = false; // lightweight login-screen data only — see 02-state-storage.js
     clearTimeout(bootTimeout);
-    paintFromState();
+    paintFromState({ haveFullState: false });
   } catch (err) {
     clearTimeout(bootTimeout);
     console.error('init() failed:', err);
     // Last resort only (e.g. genuinely offline): fall back to whatever was
     // last cached on this device, so the app isn't completely unusable —
     // but only after the real fetch has actually failed, and we say so.
+    // The local cache holds a full state from a previous successful
+    // session (see writeLocalCache() in enterAppWithFullData()/loadState()),
+    // so this path can render straight away without another network call.
     const cached = readLocalCache();
     if (cached) {
       try {
@@ -57,7 +84,8 @@ async function init() {
         showBootError('Your saved data is corrupted. Try clearing browser data and logging in again.');
         return;
       }
-      paintFromState();
+      _hasFullState = true; // the local cache only ever holds a full snapshot — see 02-state-storage.js
+      paintFromState({ haveFullState: true });
       showToast("Couldn't reach the database — showing your last saved data from this device.", 'error');
     } else {
       showBootError('An unexpected error occurred while starting the app: ' + (err && err.message ? err.message : String(err)));
