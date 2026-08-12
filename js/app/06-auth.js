@@ -64,6 +64,59 @@ function hideBootLoader() {
   if (el) el.remove();
 }
 
+// Shows (or updates, if already showing) the same branded full-screen
+// loader used for the very first page load — see index.html's initial
+// #boot-loader markup, which uses these exact class names (.bl-logo/
+// .bl-ring/.bl-txt) so this never looks like a "different" loading state
+// mid-flow. Used for: (1) a slow persisted-session auto-login (see
+// paintFromState() in 20-bootstrap.js), and (2) doLogin() below, so
+// waiting on a slow connection always shows this instead of a frozen-
+// looking screen with just a button label change.
+function showBootLoader(message) {
+  let el = document.getElementById('boot-loader');
+  if (el && el.querySelector('.bl-content')) {
+    // Boot loader is already up on screen (e.g. going straight from the
+    // initial "Loading MessLedger…" text into this one) — just update the
+    // message in place instead of rebuilding. Previously this always
+    // replaced the whole innerHTML, which destroyed and recreated the
+    // logo/ring/dots too, restarting their animations and causing a
+    // visible flash/jolt right when the text changed. A plain text swap
+    // (with a quick crossfade) leaves everything else untouched.
+    el.style.display = 'flex';
+    const txt = el.querySelector('.bl-txt');
+    if (txt && txt.textContent !== message) {
+      txt.style.opacity = '0';
+      setTimeout(() => {
+        txt.textContent = message;
+        txt.style.opacity = '1';
+      }, 150);
+    }
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'boot-loader';
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  el.innerHTML = `
+    <div class="bl-dots"></div>
+    <div class="bl-glow"></div>
+    <div class="bl-content">
+      <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
+<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
+<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<circle cx="77" cy="77" r="19" fill="#22C08A"/>
+<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div></div>
+      <div class="bl-brand">MessLedger</div>
+      <div class="bl-txt">${message}</div>
+    </div>`;
+  el.style.display = 'flex';
+}
+
 function normalizePhone(p) {
   return (p || '').replace(/\D/g, '');
 }
@@ -191,6 +244,22 @@ async function doLogin() {
     await persistMembers();
   }
   recordLoginLog(m);
+  // BUGFIX (login felt frozen on a slow connection): this used to only
+  // change the button's own label to "Signing in…" while
+  // enterAppWithFullData() awaited a full data fetch that can take several
+  // seconds — everything else on screen (the login card, phone/PIN fields)
+  // just sat there unchanged, which read as broken rather than loading.
+  // showBootLoader() brings up the same branded full-screen loader used
+  // for the initial page boot, so a slow login now always shows clear,
+  // consistent progress instead of a static form with one changed word.
+  showBootLoader('Signing you in…');
+  // A couple of seconds in, swap to a message that sets the right
+  // expectation instead of leaving the same static line up the whole
+  // time — makes a genuinely slow connection feel handled, not stuck.
+  const slowMsgTimer = setTimeout(() => {
+    const txt = document.querySelector('#boot-loader .bl-txt');
+    if (txt) txt.textContent = 'Still loading your data — this can take a few seconds on a slower connection…';
+  }, 3000);
   if (loginBtn) {
     loginBtn.disabled = true;
     loginBtn.textContent = 'Signing in…';
@@ -199,8 +268,11 @@ async function doLogin() {
     await enterAppWithFullData(m);
   } catch (err) {
     console.error('Failed to load full data after login:', err);
+    hideBootLoader();
     errBox.textContent = 'Signed in, but could not load your data. Check your connection and try again.';
     resetBtn();
+  } finally {
+    clearTimeout(slowMsgTimer);
   }
 }
 // Best-effort browser/OS guess from the user agent string. Not exact (user

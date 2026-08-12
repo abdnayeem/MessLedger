@@ -225,18 +225,23 @@ async function deleteCostDoc(id) {
     _pendingWriteSettled();
   }
 }
+// NOTE: log writes/deletes go through logStorage (LOGS_COLLECTION), not
+// storage (STORAGE_COLLECTION) — see the LOGS_COLLECTION comment in
+// storage.js. This is what keeps every login and every add/edit/delete
+// from also generating a read for every other currently-connected member's
+// live listener.
 async function persistLoginLog(id) {
   const l = state.loginLogs.find(x => x.id === id);
   if (!l) return;
   try {
-    await storage.set(PFX_LOGINLOG + id, JSON.stringify(l), true);
+    await logStorage.set(PFX_LOGINLOG + id, JSON.stringify(l), true);
   } catch (e) {
     console.error('persistLoginLog failed:', e);
   }
 }
 async function deleteLoginLogDoc(id) {
   try {
-    await storage.delete(PFX_LOGINLOG + id, true);
+    await logStorage.delete(PFX_LOGINLOG + id, true);
   } catch (e) {
     console.error('deleteLoginLogDoc failed:', e);
   }
@@ -245,14 +250,14 @@ async function persistActionLog(id) {
   const l = state.actionLogs.find(x => x.id === id);
   if (!l) return;
   try {
-    await storage.set(PFX_ACTIONLOG + id, JSON.stringify(l), true);
+    await logStorage.set(PFX_ACTIONLOG + id, JSON.stringify(l), true);
   } catch (e) {
     console.error('persistActionLog failed:', e);
   }
 }
 async function deleteActionLogDoc(id) {
   try {
-    await storage.delete(PFX_ACTIONLOG + id, true);
+    await logStorage.delete(PFX_ACTIONLOG + id, true);
   } catch (e) {
     console.error('deleteActionLogDoc failed:', e);
   }

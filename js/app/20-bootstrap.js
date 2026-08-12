@@ -31,10 +31,20 @@ function paintFromState(opts) {
       if (haveFullState) {
         enterApp(m, enterOpts);
       } else {
+        // Update the boot loader's message (same element/branding shown
+        // since page load — see index.html) so it's clear the app is now
+        // pulling actual data, not just still starting up. Same
+        // "still loading" follow-up as doLogin() for a genuinely slow
+        // connection, since this can be the same multi-second full fetch.
+        showBootLoader('Loading your dashboard…');
+        const slowMsgTimer = setTimeout(() => {
+          const txt = document.querySelector('#boot-loader .bl-txt');
+          if (txt) txt.textContent = 'Still loading your data — this can take a few seconds on a slower connection…';
+        }, 3000);
         enterAppWithFullData(m, enterOpts).catch(err => {
           console.error('Failed to load full data for persisted session:', err);
           showBootError('Could not load your data: ' + (err && err.message ? err.message : String(err)));
-        });
+        }).finally(() => clearTimeout(slowMsgTimer));
       }
       return;
     }

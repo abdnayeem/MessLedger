@@ -398,11 +398,16 @@ async function writeFullState(s) {
   (s.notifications || []).forEach(n => {
     writes.push(storage.set(PFX_NOTIF + n.id, JSON.stringify(n), true));
   });
+  // Logs go to logStorage (LOGS_COLLECTION), not storage — same reason as
+  // everywhere else logs are written, see the LOGS_COLLECTION comment in
+  // storage.js. This only runs once, for a mess still migrating off the
+  // old single-doc format, so it's the one place old-format logs get
+  // routed to their new home.
   (s.loginLogs || []).forEach(l => {
-    writes.push(storage.set(PFX_LOGINLOG + l.id, JSON.stringify(l), true));
+    writes.push(logStorage.set(PFX_LOGINLOG + l.id, JSON.stringify(l), true));
   });
   (s.actionLogs || []).forEach(l => {
-    writes.push(storage.set(PFX_ACTIONLOG + l.id, JSON.stringify(l), true));
+    writes.push(logStorage.set(PFX_ACTIONLOG + l.id, JSON.stringify(l), true));
   });
   await Promise.all(writes);
 }
@@ -510,13 +515,67 @@ function buildStateFromItems(items) {
     else if (it.key.startsWith(PFX_DEPOSIT)) s.deposits.push(JSON.parse(it.value));
     else if (it.key.startsWith(PFX_EXPENSE)) s.expenses.push(JSON.parse(it.value));
     else if (it.key.startsWith(PFX_COST)) s.costs.push(JSON.parse(it.value));
-    else if (it.key.startsWith(PFX_LOGINLOG)) s.loginLogs.push(JSON.parse(it.value));
-    else if (it.key.startsWith(PFX_ACTIONLOG)) s.actionLogs.push(JSON.parse(it.value));
     else if (it.key.startsWith(PFX_NOTIF)) s.notifications.push(JSON.parse(it.value));
     else if (it.key.startsWith(PFX_MONTHLYACTIVE)) s.monthlyActive[it.key.slice(PFX_MONTHLYACTIVE.length)] = JSON.parse(it.value);
+    // NOTE: PFX_LOGINLOG/PFX_ACTIONLOG are intentionally NOT handled here
+    // anymore — login/action logs now live in their own Firestore
+    // collection (LOGS_COLLECTION, see storage.js) instead of inside
+    // mealAppStorage, so they never show up in `items` (the live-listened
+    // collection) at all. They're loaded separately, once, on demand — see
+    // loadLogs() below.
   });
+  // BUGFIX: buildStateFromItems() is called on every single realtime
+  // snapshot (every login/logout/meal/cost/expense/deposit/settings
+  // change from ANYONE), and its result wholesale-replaces `state` (see
+  // applyFreshState() in 05-session-sync.js: `state = fresh`). Since
+  // items never contains log docs anymore, `s.loginLogs`/`s.actionLogs`
+  // above are always freshly-initialized empty arrays — without this,
+  // whatever loadLogs() had fetched (e.g. because the Login Log tab was
+  // open) would get silently wiped back to [] the instant ANY unrelated
+  // change happened anywhere in the app, re-rendering an empty log tab
+  // out from under whoever was looking at it. Logs are only ever loaded/
+  // refreshed by loadLogs() (07-ui-shell.js's setTab(), or after a test
+  // data restore) now, so every other path that rebuilds state must carry
+  // forward whatever was already loaded instead of resetting it.
+  if (typeof state !== 'undefined' && state) {
+    s.loginLogs = state.loginLogs || [];
+    s.actionLogs = state.actionLogs || [];
+  }
   fillStateDefaults(s);
   return s;
+}
+
+// One-time (non-live) load of login/action logs from their own collection.
+// These deliberately aren't part of state.days/deposits/etc's live sync —
+// see the LOGS_COLLECTION comment in storage.js for why. Call this right
+// before rendering the Login Log / Database Log tabs (see setTab() in
+// 07-ui-shell.js) rather than keeping them subscribed all the time; nobody
+// is looking at those tabs most of the time, so there's no reason to pay
+// for a live listener (or a bigger live-collection snapshot) on their
+// behalf for every signed-in member, every session.
+async function loadLogs() {
+  const [loginRes, actionRes] = await Promise.all([
+    logStorage.getByPrefix(PFX_LOGINLOG, true),
+    logStorage.getByPrefix(PFX_ACTIONLOG, true)
+  ]);
+  state.loginLogs = (loginRes.items || [])
+    .map(it => JSON.parse(it.value))
+    .sort((a, b) => b.timestamp - a.timestamp);
+  state.actionLogs = (actionRes.items || [])
+    .map(it => JSON.parse(it.value))
+    .sort((a, b) => b.at - a.at);
+  // BUGFIX (log cap silently stopped working): trimLoginLogs()/
+  // trimActionLogs() (06-auth.js) only ever prune state.loginLogs/
+  // actionLogs down to MAX_LOGIN_LOGS/MAX_ACTION_LOGS when THIS array
+  // holds the complete history — but a normal session no longer loads
+  // full log history (see the LOGS_COLLECTION comment in storage.js), so
+  // that array is usually just the handful of entries made during the
+  // current session, and the length check almost never trips. This is
+  // the one place the true full list is actually in memory, so this is
+  // the right (and only reliably correct) place to enforce the cap —
+  // right after fetching it, before anyone views/searches it.
+  if (typeof trimLoginLogs === 'function') trimLoginLogs();
+  if (typeof trimActionLogs === 'function') trimActionLogs();
 }
 // BUGFIX (full-collection read for every visitor, even ones who never log
 // in): loadState()/the realtime listener both read the ENTIRE

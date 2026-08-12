@@ -12,6 +12,25 @@
 // ---------------------------------------------------------------------------
 const STORAGE_COLLECTION = 'mealAppStorage';
 
+// Login/action log entries live in their own collection, separate from
+// mealAppStorage. They used to be per-item docs inside mealAppStorage —
+// which meant every single login and every single add/edit/delete
+// anywhere in the app wrote an EXTRA doc into the exact same collection
+// that onSnapshotAll() (below) keeps a live listener open on for every
+// signed-in member. Firestore bills a listener a read for every doc that's
+// added/changed in its result set, per connected client — so on a mess
+// with several members logged in at once, one meal tick used to cost
+// 1 write + (1 data-doc read + 1 log-doc read) x every other open tab,
+// and logging in/out did the same on top. Logs are also the highest-churn
+// data in the whole app (something is logged on almost every action), so
+// they were by far the biggest source of "phantom" reads nobody was
+// actually looking at. Moving them here means they're only ever read
+// on-demand (one-time, via logStorage.getByPrefix — see loadLogs() in
+// 02-state-storage.js), when a super admin actually opens the Login Log /
+// Database Log tab, instead of being pushed to every connected client
+// forever.
+const LOGS_COLLECTION = 'mealAppLogs';
+
 // Debounce timer for real-time updates to prevent backpressure
 let _snapshotPendingUpdate = null;
 
@@ -204,5 +223,61 @@ const storage = {
       if (onError) onError(authErr);
     });
     return () => unsub();
+  }
+};
+
+// ---------------------------------------------------------------------------
+// logStorage — same get/set/delete/getByPrefix/getAll shape as `storage`
+// above, but pointed at LOGS_COLLECTION instead of STORAGE_COLLECTION, and
+// deliberately WITHOUT any onSnapshot/live-listener methods — logs are only
+// ever meant to be read one-time, on demand (see loadLogs() in
+// 02-state-storage.js), never live-subscribed. See the LOGS_COLLECTION
+// comment above for why this is a separate collection in the first place.
+// ---------------------------------------------------------------------------
+const logStorage = {
+  async set(key, value, shared = false) {
+    await authReady;
+    await db.collection(LOGS_COLLECTION).doc(key).set({
+      value,
+      shared,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return { key, value, shared };
+  },
+
+  async delete(key, shared = false) {
+    await authReady;
+    await db.collection(LOGS_COLLECTION).doc(key).delete();
+    return { key, deleted: true, shared };
+  },
+
+  // One-time read of every log document whose ID starts with `prefix`
+  // (e.g. PFX_LOGINLOG or PFX_ACTIONLOG). Same shape as storage.getByPrefix.
+  async getByPrefix(prefix, shared = false) {
+    await authReady;
+    const snap = await db.collection(LOGS_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefix + '\uf8ff')
+      .get();
+    const items = [];
+    snap.forEach((doc) => {
+      const data = doc.data();
+      items.push({ key: doc.id, value: data.value, shared: data.shared });
+    });
+    return { items, shared };
+  },
+
+  // One-time read of every log document, regardless of prefix — used by
+  // Reset/Restore Test Data (19-backup-testdata.js) which needs to wipe or
+  // restore ALL logs, not just one prefix.
+  async getAll(shared = false) {
+    await authReady;
+    const snap = await db.collection(LOGS_COLLECTION).get();
+    const items = [];
+    snap.forEach((doc) => {
+      const data = doc.data();
+      items.push({ key: doc.id, value: data.value, shared: data.shared });
+    });
+    return { items, shared };
   }
 };

@@ -142,9 +142,21 @@ function bindActivityTracking() {
           // redundant full read.
           _listenerPausedForBackground = false;
           startRealtimeSync();
-        } else {
-          // Only briefly backgrounded — the listener never stopped, but
-          // pull once more as a safety net in case anything was missed.
+        } else if (!_snapshotUnsub) {
+          // BUGFIX (double full-collection read on every quick tab switch):
+          // this used to unconditionally call syncFromServer() here — a
+          // full storage.getAll() round trip — on EVERY visibility return,
+          // even though the live onSnapshot listener (_snapshotUnsub) was
+          // still attached the whole time and had already pushed any
+          // change that happened while the tab sat in the background.
+          // Firestore's SDK handles its own reconnect/catch-up once a
+          // backgrounded tab's network resumes, so that "safety net" read
+          // was almost always pure duplicate billing — and on mobile,
+          // where switching apps and coming right back is constant, this
+          // was one of the single biggest sources of extra reads. Now this
+          // only fires as a genuine fallback, when the listener somehow
+          // isn't running at all (e.g. it errored out and hasn't retried
+          // yet) — the one case where `state` really could be stale.
           syncFromServer();
         }
       }
