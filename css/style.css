@@ -49,6 +49,18 @@
   --warning:#8F5F16;
   --warning-bg:#FBF1DF;
 
+  /* Meals-tab-only accent tokens — added to match the reference design's
+     specific palette exactly (brighter blue/amber/purple than the app's
+     muted --primary/--warning text tones), without changing those shared
+     tokens or anything outside the Meals tab. --meals-blue reuses the same
+     hex already used by the logo/boot-loader/theme-color meta tag. */
+  --meals-blue:#2E5DE8;
+  --meals-blue-bg:#E7EDFC;
+  --meals-amber:#D97706;
+  --meals-amber-bg:#FEF3C7;
+  --meals-purple:#7C3AED;
+  --meals-purple-bg:#EDE9FE;
+
   --radius:14px;
   --radius-sm:9px;
   --radius-lg:18px;
@@ -577,10 +589,24 @@ tbody tr:hover{background:var(--surface-alt);}
    own stacked card — no separate markup needed for the two breakpoints. */
 .meal-grid-list{display:flex; flex-direction:column; gap:10px;}
 .meal-row-grid{
-  display:grid; grid-template-columns:1fr; gap:10px;
+  display:grid; grid-template-columns:1fr auto; gap:10px 12px;
+  grid-template-areas:
+    "name total"
+    "lunch lunch"
+    "dinner dinner"
+    "quick quick";
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:13px 14px; box-shadow:var(--shadow-sm);
 }
+/* Structural placement for the mobile card layout above — matches
+   .meal-row-grid's markup order (name, lunch cell, dinner cell, total,
+   quick actions) so Total can sit top-right next to the name instead of
+   at the bottom, without touching the HTML/JS that generates the row. */
+.meal-row-grid > :nth-child(1){grid-area:name;}
+.meal-row-grid > :nth-child(2){grid-area:lunch;}
+.meal-row-grid > :nth-child(3){grid-area:dinner;}
+.meal-row-grid > :nth-child(4){grid-area:total; align-self:center; justify-self:end;}
+.meal-row-grid > :nth-child(5){grid-area:quick;}
 .meal-row-grid.own{background:var(--primary-bg); border-color:#C9DCE8;}
 .meal-row-grid-head{display:none;} /* header row is desktop-only, see below */
 .mrg-name{font-weight:600; color:var(--ink); display:flex; flex-direction:column; align-items:flex-start;}
@@ -593,13 +619,42 @@ tbody tr:hover{background:var(--surface-alt);}
    Hidden on mobile — phones keep the buttons inline under Lunch/Dinner. */
 .mrg-quick{display:none;}
 
+/* Mobile "your row first, Load More for everyone else" wrapper — this had
+   NO styling at all before, which is exactly why the gap looked
+   inconsistent: the own-row card is a direct child of .meal-grid-list so
+   it got that container's 10px flex gap, but every other member's card
+   sits inside this wrapper div, which had no gap of its own — so those
+   cards just touched each other directly. Also gives the collapsed state
+   (before "Load More" is tapped) something to actually collapse against,
+   and styles the button itself. */
+.member-stat-extra{
+  display:flex; flex-direction:column; gap:10px;
+  max-height:0; overflow:hidden;
+  transition:max-height .4s ease;
+}
+.member-stat-extra.expanded{max-height:8000px;}
+.member-stat-loadmore-btn{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; margin-top:2px; padding:11px 14px;
+  background:var(--surface); border:1px dashed var(--border); border-radius:var(--radius-sm);
+  color:var(--ink-soft); font-weight:700; font-size:12.5px; letter-spacing:.2px;
+  cursor:pointer; transition:background .2s ease, border-color .2s ease, color .2s ease;
+}
+.member-stat-loadmore-btn:hover{background:var(--surface-alt); border-color:#C9DCE8; color:var(--primary-dark);}
+
 @media (min-width:900px){
   .meal-grid-list{gap:0; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden;}
   .meal-row-grid{
-    grid-template-columns:1fr 1.6fr 1.6fr auto; /* Name / Lunch / Dinner / Quick Actions */
+    grid-template-columns:1.3fr 1.6fr 1.6fr .7fr auto; /* Name / Lunch / Dinner / Total / Quick Actions */
+    grid-template-areas:none; /* mobile-only areas (see above) don't apply at desktop width */
     align-items:center; gap:16px; padding:11px 16px;
     border:none; border-radius:0; box-shadow:none; border-bottom:1px solid var(--border);
   }
+  /* Desktop keeps its original auto-placement (DOM order = column order),
+     so the mobile-only named-area assignment above must not carry over. */
+  .meal-row-grid > :nth-child(1), .meal-row-grid > :nth-child(2),
+  .meal-row-grid > :nth-child(3), .meal-row-grid > :nth-child(4),
+  .meal-row-grid > :nth-child(5){grid-area:auto; align-self:center; justify-self:stretch;}
   .meal-row-grid:last-child{border-bottom:none;}
   .meal-row-grid-head{
     display:grid; background:var(--surface-alt); color:var(--ink-faint);
@@ -612,7 +667,17 @@ tbody tr:hover{background:var(--surface-alt);}
      their own right-hand column: +1 Both on top, Reset underneath it
      (Reset only ever renders for a super admin — see app.js canReset). */
   .mrg-mobile-only{display:none;}
-  .mrg-quick{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+  .mrg-quick{display:flex; flex-direction:row; align-items:center; gap:10px;}
+  .mrg-quick-buttons{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+}
+/* Visual-only placeholder to match the reference's per-row ⋮ icon — not
+   wired to any action yet, so it's unfocusable/non-interactive on purpose. */
+.mrg-kebab{
+  display:none; width:28px; height:28px; border-radius:6px; border:none; background:transparent;
+  color:var(--ink-faint); font-size:14px; align-items:center; justify-content:center; cursor:default;
+}
+@media (min-width:900px){
+  .mrg-kebab{display:flex;}
 }
 
 .badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;}
@@ -978,6 +1043,161 @@ tbody tr:hover{background:var(--surface-alt);}
   .month-bar{margin-right:calc(24px + 9px);}
   #app{padding-left:2rem; padding-right:2rem;}
 }
+/* ---------- 15. Meals tab — header, date bar, avatars, total column, summary cards ----------
+   Purely additive/visual — no existing selector above is changed, and nothing here
+   alters app.js logic, Firestore writes, calculations, or permissions. */
+
+/* Card header: icon + title/subtitle on the left, action buttons on the right.
+   Reuses .card-header-row's bottom border/spacing; just restructures what's inside it. */
+.meals-header-row{display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px;}
+.meals-header-title{display:flex; align-items:flex-start; gap:12px; min-width:0;}
+.meals-header-icon{
+  flex-shrink:0; width:40px; height:40px; border-radius:50%;
+  background:var(--meals-blue-bg); color:var(--meals-blue);
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+}
+.meals-header-title h2{margin-bottom:2px;}
+.meals-header-title .small-note{margin-top:0;}
+.meals-header-actions{display:flex; gap:8px; flex-wrap:wrap;}
+.meals-header-actions .btn{margin-top:0;}
+.meals-header-actions .btn:not(.secondary){
+  background:var(--meals-blue); border-color:var(--meals-blue); box-shadow:0 2px 6px rgba(46,93,232,.25);
+}
+.meals-header-actions .btn:not(.secondary):hover{background:#2450C9; border-color:#2450C9;}
+
+/* Select Date row: label+input on the left, lock/time-left pill banner on the right */
+.meals-datebar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+.meals-datebar-field{display:flex; flex-direction:column; gap:6px; min-width:200px;}
+.meals-datebar-field label{margin:0; font-size:0.8125rem; font-weight:600; color:var(--ink-soft);}
+.meals-datebar-field input[type=date]{min-width:190px;}
+
+.meal-lock-pill{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  border:1px dashed var(--border); border-radius:var(--radius-sm);
+  padding:9px 14px; font-size:12.5px; color:var(--ink-soft); background:var(--surface);
+}
+.meal-lock-pill i{font-size:13px;}
+.meal-lock-pill.success{border-color:#9FD8BC; background:var(--success-bg); color:var(--success);}
+.meal-lock-pill.warning{border-color:#F3DFAF; background:var(--warning-bg); color:var(--warning);}
+.meal-lock-pill.danger{border-color:#F2C7C2; background:var(--danger-bg); color:var(--danger);}
+.meal-lock-pill .pill-badge{
+  font-weight:700; padding:2px 9px; border-radius:20px; background:rgba(255,255,255,.6);
+  border:1px solid currentColor;
+}
+.meal-lock-pill .pill-note{color:var(--ink-faint); font-weight:500;}
+
+/* Member avatar circle (initial letter, deterministic tint per member).
+   Palette kept entirely within the app's blue theme — 5 clearly distinct
+   blue hues (navy → indigo → steel → cyan-blue → sky) chosen with enough
+   hue/saturation spread apart that they read as different colors at a
+   glance, not just 5 near-identical pale greys. */
+.mrg-name-row{display:flex; align-items:center; gap:10px;}
+.member-avatar.av-0{background:#DCE6F7; color:#1E3A66; border-color:#B9CCE8;} /* navy */
+.member-avatar.av-1{background:#E3E8FE; color:#3450D6; border-color:#C3CCF7;} /* indigo */
+.member-avatar.av-2{background:#E1EDF5; color:#2B6693; border-color:#BEDAEA;} /* steel blue */
+.member-avatar.av-3{background:#DBF1FA; color:#0B7CAE; border-color:#AFE0F0;} /* cyan-blue */
+.member-avatar.av-4{background:#EAF3FC; color:#4A90D9; border-color:#C6E2F5;} /* sky blue */
+.mrg-name-info{display:flex; flex-direction:column; gap:3px; align-items:flex-start; min-width:0;}
+.mrg-name-line{display:flex; align-items:center; gap:6px; font-weight:600; color:var(--ink);}
+/* Meals tab specifically shows the "Member" role tag in blue (reference
+   image), not the app-wide green .badge.member used on the Members/
+   Dashboard tabs — scoped so nothing outside this row changes. */
+.mrg-name-info .badge.member{background:#EEF3FC; color:#5B7FB5;}
+
+/* Total column (member's lunch+dinner total for the selected date).
+   Mobile: sits top-right next to the name (see .meal-row-grid grid-area
+   above) as a small highlighted chip instead of plain stacked text, so it
+   reads as the one number worth noticing at a glance. */
+.mrg-total{display:flex; flex-direction:column; align-items:flex-end; gap:3px; text-align:right; padding-top:1px;}
+.mrg-total .meal-control-label{margin-bottom:0;}
+.mrg-total-value{
+  font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; line-height:1;
+  color:var(--meals-blue); background:var(--meals-blue-bg); border:1px solid #C7D4FA;
+  border-radius:20px; padding:5px 13px; min-width:34px; text-align:center;
+}
+@media (min-width:900px){
+  .mrg-total{align-items:center; text-align:center; padding-top:0;}
+  .mrg-total-value{font-size:17px; padding:4px 14px;}
+}
+
+/* Meal summary cards row (Total Lunch / Total Dinner / Total Meals today / Total Meals this month),
+   each with a small icon token — a decorated variant of .summary-box, same tokens/spacing. */
+.meal-summary-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px;}
+.meal-summary-card{
+  display:flex; align-items:center; gap:12px;
+  border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:14px 15px; min-width:0;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.meal-summary-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08);}
+.meal-summary-card:has(.icon-lunch){background:var(--meals-amber-bg); border-color:#F3DFAF;}
+.meal-summary-card:has(.icon-dinner){background:var(--meals-blue-bg); border-color:#C9D9F7;}
+.meal-summary-card:has(.icon-total){background:var(--success-bg); border-color:#C8ECD6;}
+.meal-summary-card:has(.icon-month){background:var(--meals-purple-bg); border-color:#DDD3FB;}
+.meal-summary-icon{
+  flex-shrink:0; width:38px; height:38px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:15px;
+  background:rgba(255,255,255,.65);
+}
+.meal-summary-icon.icon-lunch{color:var(--meals-amber);}
+.meal-summary-icon.icon-dinner{color:var(--meals-blue);}
+.meal-summary-icon.icon-total{color:var(--success);}
+.meal-summary-icon.icon-month{color:var(--meals-purple);}
+.meal-summary-card .label{font-size:0.6875rem; color:var(--ink-faint); font-weight:700; text-transform:uppercase; letter-spacing:.5px;}
+.meal-summary-card .value{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums; font-size:19px; font-weight:700; margin-top:3px; letter-spacing:-.02em;}
+@media (min-width:640px){
+  .meal-summary-grid{grid-template-columns:repeat(4,1fr);}
+}
+
+/* Lunch/Dinner Menu cards — read-only view of the Market Schedule's
+   marketItems shopping list for whoever's on duty that date/meal.
+   Side-by-side on desktop, stacked on mobile; kept deliberately compact
+   (smaller padding/icons/chips than a full .card) since these two sit
+   right under the date bar and shouldn't dominate the page. */
+.meal-menu-grid{display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:12px;}
+@media (min-width:640px){
+  .meal-menu-grid{grid-template-columns:1fr 1fr;}
+}
+.menu-card{margin-bottom:0; padding:14px 15px;}
+.menu-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.menu-card-title{display:flex; align-items:center; gap:9px; min-width:0;}
+.menu-card-title > div:last-child{font-size:13.5px;}
+.menu-card-icon{
+  flex-shrink:0; width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:12.5px;
+}
+.menu-card-icon.icon-lunch{background:var(--meals-amber-bg); color:var(--meals-amber);}
+.menu-card-icon.icon-dinner{background:var(--meals-blue-bg); color:var(--meals-blue);}
+.menu-card-head .badge{font-size:10px; padding:2px 8px;}
+.menu-items-row{display:flex; flex-wrap:wrap; align-items:center; gap:7px;}
+.menu-item-chip{
+  display:flex; align-items:center; gap:6px;
+  padding:6px 11px; border:1px solid var(--border); border-radius:20px;
+  background:var(--surface); font-size:12.5px; font-weight:600; color:var(--ink);
+}
+.menu-item-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.menu-item-dot.dot-0{background:var(--danger);}
+.menu-item-dot.dot-1{background:var(--meals-amber);}
+.menu-item-dot.dot-2{background:var(--success);}
+.menu-item-dot.dot-3{background:var(--meals-blue);}
+.menu-item-dot.dot-4{background:var(--meals-purple);}
+.menu-add-item-btn{
+  margin-top:0; padding:6px 12px; font-size:12.5px; font-weight:600; min-height:0; border-radius:20px;
+  border-style:dashed; border-color:#C9D9F7; color:var(--meals-blue); background:var(--meals-blue-bg);
+}
+.menu-add-item-btn:hover{background:#D6E2FA;}
+.meal-menu-note-row{margin-bottom:14px;}
+.meal-menu-note-row .small-note i{margin-right:5px;}
+
+/* Bottom explanatory note, boxed like the reference's info callout */
+.meal-info-box{
+  display:flex; align-items:flex-start; gap:10px;
+  background:var(--primary-bg); border:1px solid #C9DCE8; border-radius:var(--radius-sm);
+  padding:12px 14px; margin-top:14px;
+}
+.meal-info-box i{color:var(--primary); font-size:14px; margin-top:2px; flex-shrink:0;}
+.meal-info-box .small-note{margin:0; color:var(--primary-dark);}
+
 /* ---------- 14. Motion: entrances, accordion / tooltip / modal helpers ---------- */
 
 /* Page/tab transition: every render swaps #content's innerHTML wholesale,
@@ -1094,37 +1314,36 @@ details.accordion > .accordion-body{
    element up for the qty-input glow), no visual override here.
 --------------------------------------------------------------------- */
 
-/* --- Generic "pill" meal action buttons: +1 Both / Reset --- */
-.maa-both, .maa-reset{
-  position:relative; border-radius:11px; font-weight:700; letter-spacing:.1px;
-  box-shadow:0 2px 7px -2px rgba(28,39,51,.16), var(--shadow-sm);
-  transition:transform var(--dur-base) var(--ease), filter var(--dur-base) var(--ease),
-             box-shadow .4s var(--ease), background .4s var(--ease),
-             color .4s var(--ease), border-color .4s var(--ease);
+/* --- Generic "pill" meal action buttons: +1 Both / Reset ---
+   NOTE: these buttons also carry the generic ".btn.secondary" class in the
+   markup (`class="btn secondary mrg-inline-btn maa-both"`), and
+   ".btn.secondary" (two classes → specificity 0,2,0) was silently beating
+   these single-class ".maa-both"/".maa-reset" rules (0,1,0) at rest state —
+   the custom color never actually painted, only hover/active states peeked
+   through. Every selector below is now qualified with ".btn" so it matches
+   ".btn.secondary" on specificity and wins on source order instead.
+   Style matches the reference design: flat white pill, thin neutral
+   border, no fill tint — the two actions are told apart purely by text/
+   icon color (+1 Both → meals-blue, Reset → ink). */
+.btn.maa-both, .btn.maa-reset{
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; font-weight:700; letter-spacing:.1px; box-shadow:none;
+  transition:transform var(--dur-base) var(--ease), background .25s var(--ease),
+             border-color .25s var(--ease), color .25s var(--ease);
   overflow:hidden;
 }
-.maa-both{
-  background:linear-gradient(135deg, var(--primary-bg), #F3F8FB);
-  border:1px solid #C9DCE8; color:var(--primary-dark);
+.btn.maa-both{color:var(--meals-blue);}
+.btn.maa-both:hover:not(:disabled){
+  background:var(--meals-blue-bg); border-color:var(--meals-blue); transform:translateY(-1px);
 }
-.maa-both:hover:not(:disabled){
-  transform:translateY(-1.5px); filter:brightness(1.04);
-  box-shadow:0 6px 14px -3px rgba(51,96,127,.28), var(--shadow-sm);
-  background:linear-gradient(135deg, var(--primary-bg), #EAF2F7);
-}
-.maa-both:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
-.maa-both:disabled{background:var(--surface-alt); border-color:var(--border); color:var(--ink-faint); box-shadow:none;}
+.btn.maa-both:active:not(:disabled){transform:translateY(0) scale(.95);}
+.btn.maa-both:disabled{color:var(--ink-faint); background:var(--surface-alt); border-color:var(--border);}
 
-.maa-reset{
-  background:linear-gradient(135deg, var(--accent-bg), #FDF3EF);
-  border:1px solid #F2C7C2; color:var(--accent-dark);
+.btn.maa-reset{color:var(--ink);}
+.btn.maa-reset:hover:not(:disabled){
+  background:var(--surface-alt); border-color:#C7CDD4; transform:translateY(-1px);
 }
-.maa-reset:hover:not(:disabled){
-  transform:translateY(-1.5px); filter:brightness(1.04);
-  box-shadow:0 6px 14px -3px rgba(194,58,58,.22), var(--shadow-sm);
-  background:linear-gradient(135deg, var(--accent-bg), #FCE9E2);
-}
-.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
+.btn.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95);}
 
 /* --- Centered confirmation popup with a blurred backdrop ---------------
    Deliberately NOT a child of the Meals tab's re-rendered markup. The tab

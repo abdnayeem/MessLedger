@@ -30,7 +30,7 @@ function renderMembers() {
     return `
     <div class="member-row-grid">
       <div class="mrow-member">
-        <div class="member-avatar role-${m.role}" title="${roleLabelFor[m.role]}">${initials}</div>
+        <div class="member-avatar ${memberAvatarClass(m.id)}" title="${roleLabelFor[m.role]}">${initials}</div>
         <div class="mrow-member-fields">
           <input type="text" class="member-name-input" value="${m.name}" placeholder="Name" onchange="updateMemberField('${m.id}','name', this.value.trim())">
           <select class="role-select role-${m.role}" onchange="changeRole('${m.id}', this.value)">
