@@ -370,6 +370,7 @@ function renderExpenses() {
       @media (max-width:640px) {
         .gc-form-grid { grid-template-columns:1fr; }
         .gc-footer-row { flex-direction:column; align-items:stretch; }
+        .gc-info-inline { flex:0 0 auto; width:100%; }
         .gc-add-btn { width:100%; }
       }
 
@@ -386,17 +387,16 @@ function renderExpenses() {
       .aeh-header-text h2 { margin:0; font-size:19px; font-weight:800; color:#0f2a52; letter-spacing:-0.01em; }
       .aeh-header-text p { margin:4px 0 0; font-size:12.5px; color:#6b7c93; font-weight:500; }
       .aeh-info-box {
-        display:flex; gap:10px; align-items:flex-start; background:#eafcf3;
-        border:1px solid #bdf0d3; border-radius:12px; padding:12px 16px;
-        max-width:360px; flex:1 1 260px;
+        display:flex; gap:7px; align-items:flex-start; background:#eafcf3;
+        border:1px solid #bdf0d3; border-radius:10px; padding:9px 12px;
+        flex:1 1 260px; min-width:0;
       }
       .aeh-info-icon {
-        flex:0 0 auto; width:22px; height:22px; border-radius:50%;
-        background:#16a34a; color:#fff; display:flex; align-items:center; justify-content:center;
+        flex:0 0 auto; width:14px; height:14px; margin-top:1px; color:#16a34a;
       }
-      .aeh-info-icon svg { width:12px; height:12px; }
-      .aeh-info-box strong { display:block; font-size:13px; color:#15803d; font-weight:700; margin-bottom:2px; }
-      .aeh-info-box p { margin:0; font-size:11.5px; color:#4b7a5c; line-height:1.5; }
+      .aeh-info-icon svg { width:14px; height:14px; }
+      .aeh-info-box strong { display:none; }
+      .aeh-info-box p { margin:0; font-size:12px; color:#4b7a5c; line-height:1.5; }
       .aeh-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px; }
       .aeh-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
       .aeh-titledesc-box {
@@ -499,7 +499,9 @@ function renderExpenses() {
       @media (max-width:640px) {
         .aeh-grid-3, .aeh-grid-2, .aeh-titledesc-box, .aeh-split-cards { grid-template-columns:1fr; }
         .aeh-top-row { flex-direction:column; }
+        .aeh-info-box { flex:0 0 auto; width:100%; }
         .aeh-footer { flex-direction:column; align-items:stretch; }
+        .aeh-footer-info { flex:0 0 auto; width:100%; }
         .aeh-add-btn, .aeh-cancel-btn { width:100%; }
       }
 

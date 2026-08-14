@@ -344,6 +344,7 @@ function renderCosts() {
         .gc-about { flex-basis:auto; width:100%; }
         .gc-form-grid { grid-template-columns:1fr; }
         .gc-footer-row { flex-direction:column; align-items:stretch; }
+        .gc-info-inline { flex:0 0 auto; width:100%; }
         .gc-add-btn { width:100%; }
       }
 
