@@ -206,9 +206,13 @@ function showSuccessCheck(message) {
 }
 
 /* ---------------- NOTIFICATION CENTER (in-app only) ---------------- */
-// Notifications live in state.notifications — same shared Firestore
-// collection pattern as deposits/expenses/costs (one small doc per
-// notification, PFX_NOTIF+id). That's what makes read/unread state and
-// history the same on every device a member logs into, and persist across
-// logout/login until read. Shape per item: {id, memberId, type, title,
-// message, createdAt(ms), read, dedupeKey}. No browser/Chrome push popups —
+// Notifications live in state.notifications — one small Firestore doc per
+// notification (PFX_NOTIF+id), stored in its own collection alongside the
+// login/action logs (LOGS_COLLECTION, see storage.js) rather than the
+// collection the rest of the app live-listens on, and fetched one-time/
+// on-demand via loadNotifications() (02-state-storage.js) instead of being
+// pushed to every signed-in member on every change. That's what still makes
+// read/unread state and history the same on every device a member logs
+// into, and persist across logout/login until read. Shape per item: {id,
+// memberId, type, title, message, createdAt(ms), read, dedupeKey}. No
+// browser/Chrome push popups —

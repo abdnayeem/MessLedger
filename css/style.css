@@ -943,7 +943,14 @@ tbody tr:hover{background:var(--surface-alt);}
   .tab-btn-pinned{margin-top:auto; border-top:1px solid var(--border); padding-top:14px;}
 
   .content-wrap{
-    padding:20px 22px 28px;
+    /* Top padding is 0 on purpose: .tabs is a bordered box that sits flush
+       against the top of .layout, so the first card's own top edge needs to
+       start at that same y-position for the two boxes to line up. Any
+       top padding here pushes just the content column down and breaks that
+       alignment — it happened on every tab because every tab renders its
+       first element straight into this same padded box, not because any
+       one tab's markup was wrong. */
+    padding:0 22px 28px;
     align-self:stretch; /* fill the row's height, unlike .tabs which stays content-sized */
     height:100%;
     overflow-y:auto;
@@ -967,7 +974,7 @@ tbody tr:hover{background:var(--surface-alt);}
 
 @media (min-width:1280px){
   .card{padding:24px 28px;}
-  .content-wrap{padding:20px 24px 28px;}
+  .content-wrap{padding:0 24px 28px;}
   .month-bar{margin-right:calc(24px + 9px);}
   #app{padding-left:2rem; padding-right:2rem;}
 }

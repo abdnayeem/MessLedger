@@ -219,12 +219,12 @@ function applyFreshState(fresh, force) {
     _lastPendingFresh = fresh;
     return;
   }
-  // Drop any notification that we've deleted locally but whose server
-  // delete hasn't confirmed yet — otherwise a snapshot that races in during
-  // that window would bring an already-read notification back to life.
-  if (_pendingDeletedNotifIds.size && fresh.notifications && fresh.notifications.length) {
-    fresh.notifications = fresh.notifications.filter(n => !_pendingDeletedNotifIds.has(n.id));
-  }
+  // NOTE: notifications are no longer part of this snapshot at all (see the
+  // buildStateFromItems()/loadNotifications() comments in
+  // 02-state-storage.js) — fresh.notifications is just carried forward from
+  // whatever `state.notifications` already held, so there's nothing to
+  // race-guard here anymore. That guard now lives in loadNotifications()
+  // itself, which is the only thing that ever fetches new notification data.
   state = fresh;
   _hasFullState = true; // listener snapshots are always the full dataset — see 02-state-storage.js
   // The memo cache is keyed by memberId/month, not by "which state object"
@@ -491,7 +491,21 @@ let notifScheduleInterval = null;
 
 function startNotificationScheduler() {
   if (notifScheduleInterval) return;
-  notifScheduleInterval = setInterval(runScheduledNotificationChecks, 60 * 1000); // once a minute is plenty for HH:MM-granularity reminders
+  notifScheduleInterval = setInterval(async () => {
+    // Notifications are no longer pushed live (see loadNotifications() in
+    // 02-state-storage.js) — this periodic on-demand refetch is what picks
+    // up anything added since we last checked, e.g. a deposit an admin
+    // posted to this member from another device/session, on top of the
+    // time-of-day reminder checks this interval already ran. Once a minute
+    // is plenty for both.
+    try {
+      await loadNotifications();
+    } catch (e) {
+      console.error('loadNotifications (scheduler) failed:', e);
+    }
+    runScheduledNotificationChecks();
+    if (session && session.userId) renderTopWho();
+  }, 60 * 1000);
 }
 
 function stopNotificationScheduler() {

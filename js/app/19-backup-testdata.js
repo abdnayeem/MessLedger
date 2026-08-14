@@ -116,21 +116,22 @@ async function resetTestData() {
 
   showToast('Resetting test data…', 'success');
   try {
-    // Login/action logs now live in their own collection (LOGS_COLLECTION —
-    // see storage.js), separate from mealAppStorage, so they have to be
-    // fetched and wiped from there too, not just from `all`. Each wiped
-    // item is tagged with which collection it came from (`col`) so
-    // restoreTestData() below knows where to write it back.
+    // Login/action logs AND notifications now all live in their own
+    // collection (LOGS_COLLECTION — see storage.js), separate from
+    // mealAppStorage, so they have to be fetched and wiped from there too,
+    // not just from `all`. Each wiped item is tagged with which collection
+    // it came from (`col`) so restoreTestData() below knows where to write
+    // it back.
     const [all, allLogs] = await Promise.all([
       fetchAllStorageItems(),
       logStorage.getAll(true)
     ]);
-    const wipePrefixes = [PFX_DAY, PFX_DEPOSIT, PFX_EXPENSE, PFX_COST, PFX_NOTIF, PFX_MONTHLYACTIVE];
+    const wipePrefixes = [PFX_DAY, PFX_DEPOSIT, PFX_EXPENSE, PFX_COST, PFX_MONTHLYACTIVE];
     const itemsToWipe = all.items
       .filter(it => wipePrefixes.some(pfx => it.key.startsWith(pfx)))
       .map(it => ({ key: it.key, value: it.value, col: 'main' }));
     const logItemsToWipe = (allLogs.items || [])
-      .filter(it => it.key.startsWith(PFX_LOGINLOG) || it.key.startsWith(PFX_ACTIONLOG))
+      .filter(it => it.key.startsWith(PFX_LOGINLOG) || it.key.startsWith(PFX_ACTIONLOG) || it.key.startsWith(PFX_NOTIF))
       .map(it => ({ key: it.key, value: it.value, col: 'logs' }));
     const allItemsToWipe = itemsToWipe.concat(logItemsToWipe);
 
@@ -213,25 +214,24 @@ async function restoreTestData() {
     // Rebuild the affected parts of state from the restored records, same
     // parsing rules as buildStateFromItems() — mirrors how resetTestData()
     // updates state immediately rather than waiting on the realtime listener.
-    // Logs are intentionally left for loadLogs() to pick up on-demand (see
-    // 07-ui-shell.js) next time the Login Log / Database Log tab is opened,
-    // same as anywhere else in the app now — they're no longer part of the
+    // Logs and notifications are intentionally left for loadLogs()/
+    // loadNotifications() to pick up on-demand (the latter right below;
+    // the former next time the Login Log / Database Log tab is opened),
+    // same as anywhere else in the app now — neither is part of the
     // live-synced state.
     state.days = {};
     state.deposits = [];
     state.expenses = [];
     state.costs = [];
-    state.notifications = [];
     state.monthlyActive = {};
     mainItems.forEach(it => {
       if (it.key.startsWith(PFX_DAY)) state.days[it.key.slice(PFX_DAY.length)] = JSON.parse(it.value);
       else if (it.key.startsWith(PFX_DEPOSIT)) state.deposits.push(JSON.parse(it.value));
       else if (it.key.startsWith(PFX_EXPENSE)) state.expenses.push(JSON.parse(it.value));
       else if (it.key.startsWith(PFX_COST)) state.costs.push(JSON.parse(it.value));
-      else if (it.key.startsWith(PFX_NOTIF)) state.notifications.push(JSON.parse(it.value));
       else if (it.key.startsWith(PFX_MONTHLYACTIVE)) state.monthlyActive[it.key.slice(PFX_MONTHLYACTIVE.length)] = JSON.parse(it.value);
     });
-    if (logItems.length) await loadLogs();
+    if (logItems.length) await Promise.all([loadLogs(), loadNotifications()]);
 
     // Backup is now consumed — clear it so the restore option disappears
     // until the next reset creates a fresh one.

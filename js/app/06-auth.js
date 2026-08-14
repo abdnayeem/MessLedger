@@ -11,7 +11,20 @@ function enterApp(m, opts) {
   };
   sessionExpiresAt = opts.expiresAt || computeSessionExpiry();
   if (opts.persist !== false) persistSession(m);
-  runScheduledNotificationChecks();
+  // Notifications aren't part of the full-state fetch above anymore (see
+  // loadNotifications() in 02-state-storage.js) — fetch this member's own
+  // on login so the bell isn't empty until the next scheduler tick/bell-open.
+  // runScheduledNotificationChecks() is deliberately chained AFTER the fetch
+  // resolves, not fired in parallel with it — those checks dedupe by
+  // scanning state.notifications in memory, so running them before the
+  // fetch lands (against a still-empty array) could create a genuine
+  // duplicate of a reminder that already exists on the server. (They're
+  // also individually gated behind the same "have we loaded yet" flag as a
+  // second line of defense — see _notifBaselineLoaded in 01-notifications.js.)
+  loadNotifications().then(() => {
+    runScheduledNotificationChecks();
+    if (session && session.userId) renderTopWho();
+  }).catch(e => console.error('loadNotifications (login) failed:', e));
   startNotificationScheduler();
   startRealtimeSync(); // moved here from bindActivityTracking() — only open the live listener once someone is actually signed in
   document.getElementById('login-screen').style.display = 'none';
@@ -141,7 +154,15 @@ function renderLogin() {
   s.innerHTML = `
     <div class="login-card">
       <div class="login-brand">
-        <div class="logo-dot">M</div>
+        <div class="logo-dot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
+<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
+<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<circle cx="77" cy="77" r="19" fill="#22C08A"/>
+<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div>
         <div>
           <h1>MessLedger</h1>
           <div class="login-sub">Meal &amp; expense tracker</div>
@@ -397,6 +418,13 @@ function logout() {
   stopSessionCountdown();
   stopRealtimeSync();
   stopNotificationScheduler();
+  // Reset so the next login re-gates checkLowBalanceNotification/
+  // checkMarketDutyReminders/checkMealEditReminders behind a fresh
+  // loadNotifications() (see the flag's comment in 01-notifications.js) —
+  // otherwise a same-tab re-login (logout -> log back in without a full
+  // page reload) would incorrectly treat stale notification data as
+  // "already loaded" and risk creating duplicates.
+  _notifBaselineLoaded = false;
   if (_backgroundPauseTimer) {
     clearTimeout(_backgroundPauseTimer);
     _backgroundPauseTimer = null;
