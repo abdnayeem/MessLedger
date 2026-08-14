@@ -174,6 +174,23 @@ async function setTab(id) {
       showToast('Could not refresh latest data — showing last known data.', 'error');
     }
   }
+  // Login Log / Database Log aren't part of the live-synced state anymore
+  // (see loadLogs() in 02-state-storage.js and the LOGS_COLLECTION comment
+  // in storage.js) — they're fetched fresh, once, only when someone
+  // actually opens one of these two tabs, instead of being pushed to every
+  // signed-in member's listener for the entire session.
+  if (id === 'loginlog' || id === 'actionlog') {
+    const c = document.getElementById('content');
+    if (c) {
+      c.innerHTML = '<div class="card empty"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading logs…</div>';
+    }
+    try {
+      await loadLogs();
+    } catch (e) {
+      console.error('loadLogs failed:', e);
+      showToast('Could not load logs — check your connection and try again.', 'error');
+    }
+  }
   clearCalcCache();
   renderTabContent();
 }

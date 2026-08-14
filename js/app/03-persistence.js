@@ -225,18 +225,23 @@ async function deleteCostDoc(id) {
     _pendingWriteSettled();
   }
 }
+// NOTE: log writes/deletes go through logStorage (LOGS_COLLECTION), not
+// storage (STORAGE_COLLECTION) — see the LOGS_COLLECTION comment in
+// storage.js. This is what keeps every login and every add/edit/delete
+// from also generating a read for every other currently-connected member's
+// live listener.
 async function persistLoginLog(id) {
   const l = state.loginLogs.find(x => x.id === id);
   if (!l) return;
   try {
-    await storage.set(PFX_LOGINLOG + id, JSON.stringify(l), true);
+    await logStorage.set(PFX_LOGINLOG + id, JSON.stringify(l), true);
   } catch (e) {
     console.error('persistLoginLog failed:', e);
   }
 }
 async function deleteLoginLogDoc(id) {
   try {
-    await storage.delete(PFX_LOGINLOG + id, true);
+    await logStorage.delete(PFX_LOGINLOG + id, true);
   } catch (e) {
     console.error('deleteLoginLogDoc failed:', e);
   }
@@ -245,46 +250,49 @@ async function persistActionLog(id) {
   const l = state.actionLogs.find(x => x.id === id);
   if (!l) return;
   try {
-    await storage.set(PFX_ACTIONLOG + id, JSON.stringify(l), true);
+    await logStorage.set(PFX_ACTIONLOG + id, JSON.stringify(l), true);
   } catch (e) {
     console.error('persistActionLog failed:', e);
   }
 }
 async function deleteActionLogDoc(id) {
   try {
-    await storage.delete(PFX_ACTIONLOG + id, true);
+    await logStorage.delete(PFX_ACTIONLOG + id, true);
   } catch (e) {
     console.error('deleteActionLogDoc failed:', e);
   }
 }
-// Notifications sync the same way every other collection here does: each
-// one is its own small Firestore doc (PFX_NOTIF + id), so it round-trips
-// through loadState()/buildStateFromItems() and the realtime listener just
-// like deposits/expenses/etc — which is what makes the Notification Center
-// show the same read/unread state on every device a member logs into.
+// Notifications go to logStorage (LOGS_COLLECTION), not storage
+// (STORAGE_COLLECTION) — same reason login/action logs do, see the
+// LOGS_COLLECTION comment in storage.js. Each is still its own small doc
+// (PFX_NOTIF + id), and a member's notification list still round-trips
+// through login/the bell/the periodic scheduler (see loadNotifications() in
+// 02-state-storage.js) so read/unread state matches across devices — it's
+// just no longer part of the collection every other signed-in member has a
+// live listener open on. Not part of _pendingWriteCount either: that guard
+// exists to stop the live meal/deposit/etc snapshot from overwriting an
+// in-flight write of the SAME data — notifications aren't in that snapshot
+// anymore, so there's nothing for a notification write to race against.
 async function persistNotification(id) {
   const n = (state.notifications || []).find(x => x.id === id);
   if (!n) return;
-  _pendingWriteCount++;
   try {
-    await storage.set(PFX_NOTIF + id, JSON.stringify(n), true);
+    await logStorage.set(PFX_NOTIF + id, JSON.stringify(n), true);
   } catch (e) {
     console.error('persistNotification failed:', e);
-  } finally {
-    _pendingWriteSettled();
   }
 }
-// IDs we've deleted locally but the server delete may not have confirmed
-// yet. A realtime snapshot that races in during that window would otherwise
-// still contain the (not-yet-deleted) doc, and applyFreshState()'s full
-// state overwrite would resurrect it in the UI even though the user already
-// marked it read. Filtered out of incoming fresh state in applyFreshState();
-// cleared once the delete actually resolves (see deleteNotificationDoc).
+// IDs we've deleted locally (e.g. the member opened/read it) but the server
+// delete may not have confirmed yet. loadNotifications() runs on a timer and
+// on login/bell-open, independently of any particular write finishing — a
+// fetch that races in during that window would otherwise still contain the
+// (not-yet-deleted) doc and bring an already-read notification back to the
+// bell. Filtered out there; cleared once the delete actually resolves.
 const _pendingDeletedNotifIds = new Set();
 async function deleteNotificationDoc(id) {
   _pendingDeletedNotifIds.add(id);
   try {
-    await storage.delete(PFX_NOTIF + id, true);
+    await logStorage.delete(PFX_NOTIF + id, true);
   } catch (e) {
     console.error('deleteNotificationDoc failed:', e);
   } finally {

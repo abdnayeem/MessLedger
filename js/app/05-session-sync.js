@@ -142,9 +142,21 @@ function bindActivityTracking() {
           // redundant full read.
           _listenerPausedForBackground = false;
           startRealtimeSync();
-        } else {
-          // Only briefly backgrounded — the listener never stopped, but
-          // pull once more as a safety net in case anything was missed.
+        } else if (!_snapshotUnsub) {
+          // BUGFIX (double full-collection read on every quick tab switch):
+          // this used to unconditionally call syncFromServer() here — a
+          // full storage.getAll() round trip — on EVERY visibility return,
+          // even though the live onSnapshot listener (_snapshotUnsub) was
+          // still attached the whole time and had already pushed any
+          // change that happened while the tab sat in the background.
+          // Firestore's SDK handles its own reconnect/catch-up once a
+          // backgrounded tab's network resumes, so that "safety net" read
+          // was almost always pure duplicate billing — and on mobile,
+          // where switching apps and coming right back is constant, this
+          // was one of the single biggest sources of extra reads. Now this
+          // only fires as a genuine fallback, when the listener somehow
+          // isn't running at all (e.g. it errored out and hasn't retried
+          // yet) — the one case where `state` really could be stale.
           syncFromServer();
         }
       }
@@ -207,12 +219,12 @@ function applyFreshState(fresh, force) {
     _lastPendingFresh = fresh;
     return;
   }
-  // Drop any notification that we've deleted locally but whose server
-  // delete hasn't confirmed yet — otherwise a snapshot that races in during
-  // that window would bring an already-read notification back to life.
-  if (_pendingDeletedNotifIds.size && fresh.notifications && fresh.notifications.length) {
-    fresh.notifications = fresh.notifications.filter(n => !_pendingDeletedNotifIds.has(n.id));
-  }
+  // NOTE: notifications are no longer part of this snapshot at all (see the
+  // buildStateFromItems()/loadNotifications() comments in
+  // 02-state-storage.js) — fresh.notifications is just carried forward from
+  // whatever `state.notifications` already held, so there's nothing to
+  // race-guard here anymore. That guard now lives in loadNotifications()
+  // itself, which is the only thing that ever fetches new notification data.
   state = fresh;
   _hasFullState = true; // listener snapshots are always the full dataset — see 02-state-storage.js
   // The memo cache is keyed by memberId/month, not by "which state object"
@@ -479,7 +491,21 @@ let notifScheduleInterval = null;
 
 function startNotificationScheduler() {
   if (notifScheduleInterval) return;
-  notifScheduleInterval = setInterval(runScheduledNotificationChecks, 60 * 1000); // once a minute is plenty for HH:MM-granularity reminders
+  notifScheduleInterval = setInterval(async () => {
+    // Notifications are no longer pushed live (see loadNotifications() in
+    // 02-state-storage.js) — this periodic on-demand refetch is what picks
+    // up anything added since we last checked, e.g. a deposit an admin
+    // posted to this member from another device/session, on top of the
+    // time-of-day reminder checks this interval already ran. Once a minute
+    // is plenty for both.
+    try {
+      await loadNotifications();
+    } catch (e) {
+      console.error('loadNotifications (scheduler) failed:', e);
+    }
+    runScheduledNotificationChecks();
+    if (session && session.userId) renderTopWho();
+  }, 60 * 1000);
 }
 
 function stopNotificationScheduler() {

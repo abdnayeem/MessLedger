@@ -97,16 +97,50 @@ function renderLoginLog() {
   return `
     <div class="card keep-native-tables">
       <h2>Login Log</h2>
-      <div class="small-note" style="margin-bottom:12px;">Every successful sign-in and sign-out is recorded here — who, when (Bangladesh time), which action, and device/IP when they can be determined. This refreshes automatically like the rest of the dashboard. Only the most recent ${MAX_LOGIN_LOGS} records are kept.</div>
-      <div class="row-between" style="margin-bottom:14px;">
-        <input type="text" id="loginlog-search" class="search-input" placeholder="Search name, role, action, device, or IP..." value="${loginLogSearch.replace(/"/g,'&quot;')}" oninput="setLoginLogSearch(this.value)">
-        ${q ? `<div class="small-note" style="margin:0;">${list.length} of ${state.loginLogs.length} records</div>` : ''}
+      <div class="small-note" style="margin-bottom:12px;">Every successful sign-in and sign-out is recorded here — who, when (Bangladesh time), which action, and device/IP when they can be determined. This loads fresh each time you open this tab — leave and come back (or switch tabs) to see logins made by others while you were here. Only the most recent ${MAX_LOGIN_LOGS} records are kept.</div>
+      <div class="row-between" style="margin-bottom:14px; justify-content:flex-start;">
+        <input type="text" id="loginlog-search" class="search-input" style="max-width:360px; width:auto !important; flex:1 1 220px;" placeholder="Search name, role, action, device, or IP..." value="${loginLogSearch.replace(/"/g,'&quot;')}" oninput="setLoginLogSearch(this.value)">
+        <button class="btn secondary" style="background:#d33; border-color:#d33; color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearLoginLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
+        ${q ? `<div class="small-note" style="margin:0; flex-basis:100%;">${list.length} of ${state.loginLogs.length} records</div>` : ''}
       </div>
       ${list.length ? `<div class="table-responsive"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${emptyMsg}</div>`}
     </div>`;
 }
 
 function attachLoginLogHandlers() {}
+
+// Deletes every login log doc (from logStorage / mealAppLogs) and clears
+// them from state — a hard reset for this log only, separate from the
+// Database Log and from Reset All Test Data (which never touched logs
+// specifically). Superadmin-only, same PIN-confirm pattern as the other
+// destructive actions in Settings > Danger Zone.
+async function clearLoginLog() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can do this.', 'error');
+    return;
+  }
+  if (!state.loginLogs.length) {
+    showToast('Login log is already empty.', 'success');
+    return;
+  }
+  const me = state.members.find(m => m.id === session.userId);
+  const enteredPin = prompt(`This permanently deletes all ${state.loginLogs.length} login log record(s). This cannot be undone.\n\nEnter your super admin PIN to confirm:`);
+  if (enteredPin === null) return;
+  if (!me || enteredPin !== me.pin) {
+    showToast('Incorrect PIN. Cancelled.', 'error');
+    return;
+  }
+  showToast('Clearing login log…', 'success');
+  try {
+    await Promise.all(state.loginLogs.map(l => logStorage.delete(PFX_LOGINLOG + l.id, true)));
+    state.loginLogs = [];
+    showToast('Login log cleared.', 'success');
+    renderTabContent();
+  } catch (e) {
+    console.error('clearLoginLog failed:', e);
+    showToast('Failed to clear login log: ' + (e && e.message ? e.message : 'unknown error'), 'error');
+  }
+}
 
 /* ---------------- DATABASE ACTION LOG (super admin only) ---------------- */
 let actionLogSearch = '';
@@ -166,15 +200,46 @@ function renderActionLog() {
   return `
     <div class="card keep-native-tables">
       <h2>Database Log</h2>
-      <div class="small-note" style="margin-bottom:12px;">Every add/edit/delete made to Meals, Grocery Costs, Shared Expenses, Balances, Members, and Settings is recorded here — who, when (Bangladesh time), and what. This refreshes automatically like the rest of the dashboard. Only the most recent ${MAX_ACTION_LOGS} records are kept.</div>
-      <div class="row-between" style="margin-bottom:14px;">
-        <input type="text" id="actionlog-search" class="search-input" placeholder="Search name, role, module, action, or detail..." value="${actionLogSearch.replace(/"/g,'&quot;')}" oninput="setActionLogSearch(this.value)">
-        ${q ? `<div class="small-note" style="margin:0;">${list.length} of ${state.actionLogs.length} records</div>` : ''}
+      <div class="small-note" style="margin-bottom:12px;">Every add/edit/delete made to Meals, Grocery Costs, Shared Expenses, Balances, Members, and Settings is recorded here — who, when (Bangladesh time), and what. This loads fresh each time you open this tab — leave and come back (or switch tabs) to see actions made by others while you were here. Only the most recent ${MAX_ACTION_LOGS} records are kept.</div>
+      <div class="row-between" style="margin-bottom:14px; justify-content:flex-start;">
+        <input type="text" id="actionlog-search" class="search-input" style="max-width:360px; width:auto !important; flex:1 1 220px;" placeholder="Search name, role, module, action, or detail..." value="${actionLogSearch.replace(/"/g,'&quot;')}" oninput="setActionLogSearch(this.value)">
+        <button class="btn secondary" style="background:#d33; border-color:#d33; color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearActionLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
+        ${q ? `<div class="small-note" style="margin:0; flex-basis:100%;">${list.length} of ${state.actionLogs.length} records</div>` : ''}
       </div>
       ${list.length ? `<div class="table-responsive"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${emptyMsg}</div>`}
     </div>`;
 }
 
 function attachActionLogHandlers() {}
+
+// Deletes every database action log doc (from logStorage / mealAppLogs)
+// and clears them from state. Same pattern as clearLoginLog() above.
+async function clearActionLog() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can do this.', 'error');
+    return;
+  }
+  if (!state.actionLogs.length) {
+    showToast('Database log is already empty.', 'success');
+    return;
+  }
+  const me = state.members.find(m => m.id === session.userId);
+  const enteredPin = prompt(`This permanently deletes all ${state.actionLogs.length} database log record(s). This cannot be undone.\n\nEnter your super admin PIN to confirm:`);
+  if (enteredPin === null) return;
+  if (!me || enteredPin !== me.pin) {
+    showToast('Incorrect PIN. Cancelled.', 'error');
+    return;
+  }
+  showToast('Clearing database log…', 'success');
+  try {
+    await Promise.all(state.actionLogs.map(l => logStorage.delete(PFX_ACTIONLOG + l.id, true)));
+    state.actionLogs = [];
+    showToast('Database log cleared.', 'success');
+    renderTabContent();
+  } catch (e) {
+    console.error('clearActionLog failed:', e);
+    showToast('Failed to clear database log: ' + (e && e.message ? e.message : 'unknown error'), 'error');
+  }
+}
 
 /* ---------------- SETTINGS (super admin only) ---------------- */

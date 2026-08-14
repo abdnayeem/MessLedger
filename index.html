@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, viewport-fit=cover">
-<meta name="theme-color" content="#0E6E5A">
+<meta name="theme-color" content="#2E5DE8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>MessLedger — Meal &amp; Expense Tracker</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>MessLedger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -21,21 +22,104 @@
      exactly the "5 seconds of white screen" being seen. */
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   html,body{background:#F6F7F4; margin:0; width:100%; overflow-x:hidden;}
-  #boot-loader{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:#F6F7F4; font-family:sans-serif; z-index:99999;}
-  #boot-loader .spin{width:34px; height:34px; border:3px solid #E1E6DF; border-top-color:#0E6E5A; border-radius:50%; animation:boot-spin .8s linear infinite;}
-  #boot-loader .txt{color:#4A5750; font-size:13.5px;}
+
+  /* ===== MessLedger boot / loading screen =====
+     One signature texture (a fine dot grid) instead of several stacked
+     effects — restrained on purpose so it reads as premium SaaS chrome,
+     not decoration competing with the logo. */
+  #boot-loader{
+    position:fixed; inset:0; overflow:hidden; z-index:99999;
+    display:flex; align-items:center; justify-content:center;
+    background:#FAFBFA;
+    font-family:sans-serif;
+  }
+
+  /* fine dot grid — fixed size, centered explicitly (not full-viewport),
+     so it stays a tidy halo behind the mark instead of stretching into a
+     huge, oddly-shaped haze on wide desktop screens. */
+  #boot-loader .bl-dots{
+    position:absolute; width:620px; height:620px; left:50%; top:44%; transform:translate(-50%,-50%);
+    pointer-events:none;
+    background-image:radial-gradient(rgba(46,93,232,.4) 1px, transparent 1px);
+    background-size:22px 22px;
+    -webkit-mask-image:radial-gradient(ellipse 55% 55% at 50% 50%, #000 0%, transparent 78%);
+    mask-image:radial-gradient(ellipse 55% 55% at 50% 50%, #000 0%, transparent 78%);
+    opacity:.5;
+  }
+
+  /* one quiet radial wash behind the mark — same fixed-size + explicit
+     centering fix as .bl-dots above (it previously had no top/left, so on
+     a flex container it fell back to the top-left corner instead of
+     actually centering — invisible on a small phone screen, obvious on a
+     big desktop one). */
+  #boot-loader .bl-glow{
+    position:absolute; width:420px; height:420px; left:50%; top:44%; transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(46,93,232,.09), transparent 68%);
+    pointer-events:none; animation:bl-glow-breathe 6s ease-in-out infinite;
+  }
+
+  /* center card */
+  #boot-loader .bl-content{
+    position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:16px;
+    animation:bl-fade-in .5s ease-out;
+  }
+  #boot-loader .bl-ring-wrap{position:relative; width:80px; height:80px; display:flex; align-items:center; justify-content:center;}
+  #boot-loader .bl-ring-track{position:absolute; inset:0; border-radius:50%; border:2.5px solid rgba(46,93,232,.10);}
+  #boot-loader .bl-ring{position:absolute; inset:0; border-radius:50%; border:2.5px solid transparent; border-top-color:#2E5DE8; animation:boot-spin 1s linear infinite;}
+  #boot-loader .bl-logo{
+    width:56px; height:56px; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 20px -6px rgba(46,93,232,.4);
+    border-radius:14px;
+  }
+  #boot-loader .bl-logo svg{width:100%; height:100%; display:block;}
+  #boot-loader .bl-brand{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px; letter-spacing:.1px;
+    color:#1E2A44; margin-top:6px;
+  }
+  #boot-loader .bl-txt{color:#8A93A3; font-size:12px; letter-spacing:.1px; text-align:center; transition:opacity .15s ease;}
+
   @keyframes boot-spin{to{transform:rotate(360deg);}}
+  @keyframes bl-fade-in{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+  @keyframes bl-glow-breathe{0%,100%{opacity:.7; transform:scale(1);} 50%{opacity:1; transform:scale(1.06);}}
+  @media (prefers-reduced-motion:reduce){
+    #boot-loader *{animation-duration:.001ms !important; animation-iteration-count:1 !important;}
+  }
 </style>
 </head>
 <body>
-<div id="boot-loader"><div class="spin"></div><div class="txt">Loading MessLedger…</div></div>
+<div id="boot-loader">
+  <div class="bl-dots"></div>
+  <div class="bl-glow"></div>
+  <div class="bl-content">
+    <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
+<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
+<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<circle cx="77" cy="77" r="19" fill="#22C08A"/>
+<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div></div>
+    <div class="bl-brand">MessLedger</div>
+    <div class="bl-txt">Loading MessLedger…</div>
+  </div>
+</div>
 <div id="app">
   <div id="toast-container" class="toast-container"></div>
   <div id="login-screen"></div>
   <div id="main-screen">
     <header class="topbar">
       <div class="brand">
-        <div class="logo-dot">M</div>
+        <div class="logo-dot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
+<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
+<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
+<circle cx="77" cy="77" r="19" fill="#22C08A"/>
+<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div>
         <div class="brand-text">
           <h1>MessLedger</h1>
           <div class="sub">Meal &amp; expense tracker</div>

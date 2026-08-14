@@ -139,6 +139,79 @@ function effectiveMaxMealQty(role) {
   return state.settings.maxMealQty;
 }
 
+/* ---------------- MEAL ACTION BUTTON FEEDBACK (visual only — no logic changes) ----------------
+   The four meal action controls (+ Add, +1 Both, Reset, quantity Update) still perform
+   their Firestore writes exactly as before; this layer only decorates them with a
+   temporary success/error visual state once the write settles. Because changeMeal/
+   changeBothMeals/setMealQty/resetMealsForMember call renderTabContent() optimistically
+   *before* the write finishes, the clicked element is already gone from the DOM by the
+   time the write resolves — so elements are looked up again by data-maa attribute
+   (there can be a mobile + desktop copy of the same control; both are updated, since
+   only one is ever visible at a time via CSS) rather than holding a stale node
+   reference. */
+function mealActionSelector(action, memberId, type) {
+  return `[data-maa="${action}"][data-maa-member="${memberId}"]${type ? `[data-maa-type="${type}"]` : ''}`;
+}
+
+// One fixed hold time for how long the confirmation stays visible. Must be
+// comfortably longer than the staged entrance animation (backdrop → card →
+// icon → ring pulse → message, ~1.06s at its longest) or the popup starts
+// fading out again before it even finishes appearing.
+const MEAL_ACTION_FEEDBACK_HOLD_MS = 2200;
+let _mealActionPopupHideTimer = null;
+
+// Shows one reusable, centered confirmation popup with a blurred/dimmed
+// backdrop, then fades it back out. It's a single element appended once to
+// <body> — not part of the Meals tab's own markup — so it's completely
+// unaffected by renderTabContent() re-running underneath it (the tab
+// redraws optimistically on click, and again moments later when the
+// realtime Firestore listener echoes the same write back).
+function showMealActionPopup(ok, text) {
+  let overlay = document.getElementById('meal-action-popup');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'meal-action-popup';
+    overlay.className = 'maa-popup-overlay';
+    overlay.innerHTML = `<div class="maa-popup-card"><div class="maa-popup-icon-wrap"><span class="maa-popup-icon-ring"></span><span class="maa-popup-icon"></span></div><div class="maa-popup-msg"></div></div>`;
+    document.body.appendChild(overlay);
+  }
+  clearTimeout(_mealActionPopupHideTimer);
+  overlay.classList.remove('maa-popup-show', 'maa-popup-success', 'maa-popup-error');
+  void overlay.offsetWidth; // restart the fade-in cleanly on rapid repeat clicks
+  overlay.classList.add(ok ? 'maa-popup-success' : 'maa-popup-error');
+  overlay.querySelector('.maa-popup-icon').textContent = ok ? '✓' : '⚠';
+  overlay.querySelector('.maa-popup-msg').textContent = text;
+  requestAnimationFrame(() => overlay.classList.add('maa-popup-show'));
+  _mealActionPopupHideTimer = setTimeout(() => {
+    overlay.classList.remove('maa-popup-show');
+  }, MEAL_ACTION_FEEDBACK_HOLD_MS);
+}
+
+function flashMealAction(selector, ok, successText) {
+  showMealActionPopup(ok, ok ? successText : '⚠ Failed');
+  // Extra: a brief glow on the qty input itself for the Update action.
+  const el = document.querySelector(selector);
+  if (el && el.classList.contains('qty-input')) {
+    el.classList.remove('maa-glow-success', 'maa-glow-error');
+    el.classList.add(ok ? 'maa-glow-success' : 'maa-glow-error');
+    setTimeout(() => el.classList.remove('maa-glow-success', 'maa-glow-error'), MEAL_ACTION_FEEDBACK_HOLD_MS);
+  }
+}
+
+// Wraps an existing persistDay(...) call with success/error visual feedback for the
+// button that triggered it, without changing what persistDay itself does or its
+// existing toast-on-failure behavior. If persistDay doesn't return a Promise, this
+// quietly no-ops and nothing about the write path changes.
+function withMealActionFeedback(persistResult, selector, successText) {
+  if (persistResult && typeof persistResult.then === 'function') {
+    persistResult.then(
+      () => flashMealAction(selector, true, successText),
+      () => flashMealAction(selector, false, successText)
+    );
+  }
+  return persistResult;
+}
+
 /* ---------------- MEALS ---------------- */
 function todayStr() {
   return bdTodayDateStr();
@@ -305,29 +378,29 @@ function renderMealsEdit(headerHtml) {
         <div class="mrg-cell-main">
           <span class="meal-control-label mrg-col-label">Lunch</span>
           <div class="stepper">
-            <button ${canDecrease?'':'disabled'} onclick="changeMeal('${m.id}','lunch',-1)">−</button>
-            <input type="number" class="qty-input" min="0" ${myMaxQtyAttr} value="${rec.lunch||0}" ${canDecrease?'':'disabled'} onchange="setMealQty('${m.id}','lunch',this.value)">
-            <button ${canIncrease?'':'disabled'} onclick="changeMeal('${m.id}','lunch',1)">+</button>
+            <button class="maa-remove" data-maa="remove" data-maa-member="${m.id}" data-maa-type="lunch" data-maa-label="−" ${canDecrease?'':'disabled'} onclick="changeMeal('${m.id}','lunch',-1)">−</button>
+            <input type="number" class="qty-input" min="0" ${myMaxQtyAttr} value="${rec.lunch||0}" ${canDecrease?'':'disabled'} data-maa="update" data-maa-member="${m.id}" data-maa-type="lunch" onchange="setMealQty('${m.id}','lunch',this.value)">
+            <button class="maa-add" data-maa="add" data-maa-member="${m.id}" data-maa-type="lunch" data-maa-label="+" ${canIncrease?'':'disabled'} onclick="changeMeal('${m.id}','lunch',1)">+</button>
           </div>
           ${rec.lunchBy && showAdded ? `<div class="small-note">Added by: ${rec.lunchBy}</div>` : ''}
         </div>
-        <button class="btn secondary mrg-inline-btn mrg-mobile-only" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
+        <button class="btn secondary mrg-inline-btn mrg-mobile-only maa-both" data-maa="both" data-maa-member="${m.id}" data-maa-label="+1 Both" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
       </div>
       <div class="mrg-cell">
         <div class="mrg-cell-main">
           <span class="meal-control-label mrg-col-label">Dinner</span>
           <div class="stepper">
-            <button ${canDecrease?'':'disabled'} onclick="changeMeal('${m.id}','dinner',-1)">−</button>
-            <input type="number" class="qty-input" min="0" ${myMaxQtyAttr} value="${rec.dinner||0}" ${canDecrease?'':'disabled'} onchange="setMealQty('${m.id}','dinner',this.value)">
-            <button ${canIncrease?'':'disabled'} onclick="changeMeal('${m.id}','dinner',1)">+</button>
+            <button class="maa-remove" data-maa="remove" data-maa-member="${m.id}" data-maa-type="dinner" data-maa-label="−" ${canDecrease?'':'disabled'} onclick="changeMeal('${m.id}','dinner',-1)">−</button>
+            <input type="number" class="qty-input" min="0" ${myMaxQtyAttr} value="${rec.dinner||0}" ${canDecrease?'':'disabled'} data-maa="update" data-maa-member="${m.id}" data-maa-type="dinner" onchange="setMealQty('${m.id}','dinner',this.value)">
+            <button class="maa-add" data-maa="add" data-maa-member="${m.id}" data-maa-type="dinner" data-maa-label="+" ${canIncrease?'':'disabled'} onclick="changeMeal('${m.id}','dinner',1)">+</button>
           </div>
           ${rec.dinnerBy && showAdded ? `<div class="small-note">Added by: ${rec.dinnerBy}</div>` : ''}
         </div>
-        ${canReset ? `<button class="btn secondary mrg-inline-btn mrg-mobile-only" onclick="resetMealsForMember('${m.id}')">Reset</button>` : ''}
+        ${canReset ? `<button class="btn secondary mrg-inline-btn mrg-mobile-only maa-reset" data-maa="reset" data-maa-member="${m.id}" data-maa-label="↻ Reset" onclick="resetMealsForMember('${m.id}')">↻ Reset</button>` : ''}
       </div>
       <div class="mrg-quick">
-        <button class="btn secondary mrg-inline-btn" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
-        ${canReset ? `<button class="btn secondary mrg-inline-btn" onclick="resetMealsForMember('${m.id}')">Reset</button>` : ''}
+        <button class="btn secondary mrg-inline-btn maa-both" data-maa="both" data-maa-member="${m.id}" data-maa-label="+1 Both" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
+        ${canReset ? `<button class="btn secondary mrg-inline-btn maa-reset" data-maa="reset" data-maa-member="${m.id}" data-maa-label="↻ Reset" onclick="resetMealsForMember('${m.id}')">↻ Reset</button>` : ''}
       </div>
     </div>`
     };
@@ -656,7 +729,9 @@ async function changeMeal(memberId, type, delta) {
   // Optimistic UI — the +/- stepper should react instantly; the Firestore
   // write happens in the background (persistDay already toasts on failure).
   renderTabContent();
-  persistDay(mealSelectedDate);
+  const mealActionName = delta > 0 ? 'add' : 'remove';
+  const mealActionText = delta > 0 ? '✓ Added' : '✓ Removed';
+  withMealActionFeedback(persistDay(mealSelectedDate), mealActionSelector(mealActionName, memberId, type), mealActionText);
 }
 // Bumps lunch AND dinner together by delta in one go (one persist, one
 // rerender) — for the common case of "this person is eating both today"
@@ -717,7 +792,11 @@ async function changeBothMeals(memberId, delta) {
     rec[type + 'At'] = ts;
   });
   renderTabContent();
-  persistDay(mealSelectedDate);
+  if (delta > 0) {
+    withMealActionFeedback(persistDay(mealSelectedDate), mealActionSelector('both', memberId), '✓ Both Added');
+  } else {
+    persistDay(mealSelectedDate);
+  }
 }
 async function setMealQty(memberId, type, rawValue) {
   // Date range validation for members
@@ -767,7 +846,7 @@ async function setMealQty(memberId, type, rawValue) {
   state.days[mealSelectedDate].meals[memberId][type + 'By'] = `${memberById(session.userId).name} (${roleLabel(session.role)})`;
   state.days[mealSelectedDate].meals[memberId][type + 'At'] = nowTimestamp();
   renderTabContent();
-  persistDay(mealSelectedDate);
+  withMealActionFeedback(persistDay(mealSelectedDate), mealActionSelector('update', memberId, type), '✓ Updated');
 }
 
 // NEW: Reset both lunch and dinner for a member on the current selected date
@@ -814,8 +893,7 @@ async function resetMealsForMember(memberId) {
   rec.dinnerAt = null;
 
   renderTabContent();
-  showToast(`Reset meals for ${memberById(memberId).name} on ${dateStr}.`, 'success');
-  persistDay(dateStr);
+  withMealActionFeedback(persistDay(dateStr), mealActionSelector('reset', memberId), `✓ Reset for ${memberById(memberId).name}`);
 }
 
 /* ---------------- HISTORY ---------------- */

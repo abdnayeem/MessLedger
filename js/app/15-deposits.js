@@ -126,7 +126,7 @@ function renderDeposits() {
       <div class="summary-grid">
         <div class="summary-box"><div class="label">Total Deposits</div><div class="value pos">${fmtMoney(monthDep)}</div></div>
         <div class="summary-box"><div class="label">Total Withdrawn</div><div class="value ${monthWd>0?'neg':''}">${fmtMoney(monthWd)}</div></div>
-        <div class="summary-box"><div class="label">Net Balance Change</div><div class="value ${monthNet>=0?'pos':'neg'}">${monthNet>=0?'':'-'}${fmtMoney(Math.abs(monthNet))}</div></div>
+        <div class="summary-box"><div class="label">Remaining Operating Cash</div><div class="value ${monthNet>=0?'pos':'neg'}">${monthNet>=0?'':'-'}${fmtMoney(Math.abs(monthNet))}</div></div>
       </div>
     </div>` : '';
   return `
@@ -305,8 +305,16 @@ async function addWithdrawal() {
 }
 async function deleteDeposit(id) {
   const rec = state.deposits.find(d => d.id === id);
-  if (rec && !guardAdminMonthAccess(rec.date.slice(0, 7), 'deposits')) return;
-  if (!confirm('Delete this deposit record? This cannot be undone.')) return;
+  if (!rec) {
+    showToast('This deposit record could not be found — it may have just been deleted.', 'error');
+    return;
+  }
+  if (!guardAdminMonthAccess(rec.date.slice(0, 7), 'deposits')) return;
+  // BUGFIX (same as deleteCost()/deleteExpense()): show which record this
+  // is — date/member/amount — instead of a generic message.
+  const memberName = memberById(rec.memberId)?.name || 'Unknown member';
+  const typeLabel = rec.type === 'withdrawal' ? 'Withdrawal' : 'Deposit';
+  if (!confirm(`Delete this ${typeLabel.toLowerCase()}?\n\n${rec.date} · ${memberName} · ${fmtMoney(Math.abs(rec.amount))}\n\nThis cannot be undone.`)) return;
   state.deposits = state.deposits.filter(d => d.id !== id);
   renderTabContent();
   showToast('Deposit record deleted.', 'success');

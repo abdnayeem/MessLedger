@@ -5,6 +5,58 @@
 // notifications only ever show inside the bell/panel in this app.
 const NOTIF_MAX_PER_USER = 200; // cap so a member's notification history can't grow forever
 let notifPanelOpen = false;
+// True once loadNotifications() has completed at least once THIS session.
+// checkLowBalanceNotification/checkMarketDutyReminders/checkMealEditReminders
+// all dedupe purely by scanning state.notifications in memory (see
+// addNotification()) — if any of them ran while state.notifications was
+// still empty/stale (the gap between enterApp() starting and its
+// loadNotifications() call actually resolving from Firestore), they'd have
+// no way to see a matching notification that already exists on the server
+// from an earlier session/device, and would create a genuine duplicate
+// (same dedupeKey, different id). Gating these three checks on this flag
+// closes that gap — they simply no-op until the real list is in hand,
+// then run normally on every render/tick after that. Reset to false on
+// logout so the next login re-gates correctly. Doesn't apply to the
+// one-off addNotification calls from cost/expense/deposit actions
+// (13/14/15-*.js) — those fire on a specific admin action rather than a
+// repeating check, so there's no meaningful duplicate-creation window.
+let _notifBaselineLoaded = false;
+// Dedupe keys the member has explicitly read/dismissed (see
+// markNotificationRead/markAllNotificationsRead below) for the recurring
+// checks — lowBalance/marketReminder/mealEditReminder — that re-run on
+// every render/scheduler tick, not just once. Those checks' dedupeKeys
+// already embed today's BD date, so this only needs to remember "already
+// dismissed" for the rest of today: without it, marking one read deletes
+// its Firestore doc, but the very next render (often the SAME click's own
+// re-render, since markNotifAndRerender calls renderTopWho() right after)
+// would find no matching doc in state.notifications and instantly recreate
+// it — the notification would reappear the moment it was "cleared", making
+// clearing look completely broken while the underlying condition (balance
+// still low, still your market day, etc.) hadn't changed. One-off
+// notifications (deposit/expense/cost — dedupeKey includes a unique
+// record id) are unaffected either way since that exact dedupeKey can
+// never legitimately recur. Kept in localStorage rather than Firestore —
+// it only needs to suppress recreation on this device for the rest of
+// today; briefly re-seeing a dismissed reminder on a different device is
+// harmless and self-resolves once read there too.
+const DISMISSED_DEDUPE_KEYS_LS = 'meedger_dismissedDedupeKeys';
+function _readDismissedDedupeKeys() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DISMISSED_DEDUPE_KEYS_LS) || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+function _rememberDismissedDedupeKey(dedupeKey) {
+  if (!dedupeKey) return;
+  try {
+    const set = _readDismissedDedupeKeys();
+    set.add(dedupeKey);
+    // Cap so this can't grow forever — far more than a household mess
+    // will ever generate; we only actually need "recent" entries anyway.
+    localStorage.setItem(DISMISSED_DEDUPE_KEYS_LS, JSON.stringify(Array.from(set).slice(-500)));
+  } catch (e) { /* localStorage unavailable — worst case is the old recreate-on-next-render behavior */ }
+}
 
 function getUserNotifications(userId) {
   return (state.notifications || []).filter(n => n.memberId === userId).sort((a, b) => b.createdAt - a.createdAt);
@@ -43,6 +95,7 @@ function addNotification(userId, opts) {
   const message = (opts.message || '').trim() || '';
   const dedupeKey = opts.dedupeKey || `${type}::${title}::${message}`;
   if (state.notifications.some(n => n.memberId === userId && n.dedupeKey === dedupeKey)) return; // duplicate — skip
+  if (_readDismissedDedupeKeys().has(dedupeKey)) return; // already read/dismissed today — see the comment on DISMISSED_DEDUPE_KEYS_LS above
   const notif = {
     id: 'n' + Date.now() + Math.random().toString(36).slice(2, 8),
     memberId: userId,
@@ -72,20 +125,25 @@ function addNotification(userId, opts) {
 function markNotificationRead(userId, id) {
   const idx = (state.notifications || []).findIndex(x => x.id === id && x.memberId === userId);
   if (idx === -1) return;
-  state.notifications.splice(idx, 1);
+  const [n] = state.notifications.splice(idx, 1);
+  if (n) _rememberDismissedDedupeKey(n.dedupeKey); // see DISMISSED_DEDUPE_KEYS_LS above — stops a recurring check from instantly recreating this on the next render
   deleteNotificationDoc(id); // fire-and-forget, same pattern as the rest of this module
 }
 
 function markAllNotificationsRead(userId) {
   const mine = (state.notifications || []).filter(n => n.memberId === userId);
   state.notifications = (state.notifications || []).filter(n => n.memberId !== userId);
-  mine.forEach(n => deleteNotificationDoc(n.id));
+  mine.forEach(n => {
+    _rememberDismissedDedupeKey(n.dedupeKey); // see DISMISSED_DEDUPE_KEYS_LS above
+    deleteNotificationDoc(n.id);
+  });
 }
 // One low-balance alert per member per calendar (BD) day — dedupeKey
 // includes today's BD date so it naturally resets and can re-fire the next
 // day if the balance is still low, without ever double-firing the same day.
 function checkLowBalanceNotification(memberId, bal) {
   if (!state || !state.settings) return;
+  if (!_notifBaselineLoaded) return; // avoid dedupe races — see the flag's comment above
   if (bal >= state.settings.lowBalanceWarn) {
     // Balance has recovered (e.g. a deposit was just added) — remove any
     // still-unread low-balance warning for this member instead of leaving
@@ -129,6 +187,7 @@ function bdNowHHMM() {
 // repeatedly (e.g. every render or on an interval) without duplicating.
 function checkMarketDutyReminders() {
   if (!state || !state.settings || !state.settings.notifications) return;
+  if (!_notifBaselineLoaded) return; // avoid dedupe races — see the flag's comment above
   if (!notifTypeEnabled('marketReminder')) return;
   const cfg = state.settings.notifications;
   if (bdNowHHMM() < (cfg.marketReminderTime || '08:00')) return;
@@ -155,6 +214,7 @@ function checkMarketDutyReminders() {
 // they're not included — only members are actually "affected" by the lock).
 function checkMealEditReminders() {
   if (!state || !state.settings || !state.settings.notifications) return;
+  if (!_notifBaselineLoaded) return; // avoid dedupe races — see the flag's comment above
   if (!notifTypeEnabled('mealEditReminder')) return;
   if (state.settings.mealLockEnabled === false) return; // locking is off entirely — no cutoff to remind about
   const cfg = state.settings.notifications;
@@ -202,6 +262,13 @@ function toggleNotifPanel(e) {
   notifPanelOpen = !notifPanelOpen;
   if (notifPanelOpen) {
     document.addEventListener('click', closeNotifPanelOnOutsideClick);
+    // Notifications are only fetched on-demand now (login, this open, and
+    // once a minute in the background — see loadNotifications() in
+    // 02-state-storage.js), so grab anything new right as the panel opens
+    // instead of waiting on the next scheduler tick.
+    loadNotifications().then(() => {
+      if (notifPanelOpen) renderTopWho();
+    }).catch(e => console.error('loadNotifications (bell open) failed:', e));
   } else {
     document.removeEventListener('click', closeNotifPanelOnOutsideClick);
   }
@@ -272,4 +339,3 @@ function generateRecoveryCode() {
   for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return 'MESS-' + code;
 }
-

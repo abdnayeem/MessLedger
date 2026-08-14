@@ -943,7 +943,14 @@ tbody tr:hover{background:var(--surface-alt);}
   .tab-btn-pinned{margin-top:auto; border-top:1px solid var(--border); padding-top:14px;}
 
   .content-wrap{
-    padding:20px 22px 28px;
+    /* Top padding is 0 on purpose: .tabs is a bordered box that sits flush
+       against the top of .layout, so the first card's own top edge needs to
+       start at that same y-position for the two boxes to line up. Any
+       top padding here pushes just the content column down and breaks that
+       alignment — it happened on every tab because every tab renders its
+       first element straight into this same padded box, not because any
+       one tab's markup was wrong. */
+    padding:0 22px 28px;
     align-self:stretch; /* fill the row's height, unlike .tabs which stays content-sized */
     height:100%;
     overflow-y:auto;
@@ -967,7 +974,7 @@ tbody tr:hover{background:var(--surface-alt);}
 
 @media (min-width:1280px){
   .card{padding:24px 28px;}
-  .content-wrap{padding:20px 24px 28px;}
+  .content-wrap{padding:0 24px 28px;}
   .month-bar{margin-right:calc(24px + 9px);}
   #app{padding-left:2rem; padding-right:2rem;}
 }
@@ -1078,3 +1085,116 @@ details.accordion > .accordion-body{
   opacity:0; transition:opacity var(--dur-slow) var(--ease) .75s;
 }
 .success-check-overlay.show .success-check-msg{opacity:1;}
+
+/* ---------------------------------------------------------------------
+   MEAL ACTION BUTTONS — polished redesign (Meals tab only)
+   Covers "+1 Both", "Reset", and the confirmation popup. The +/- stepper
+   buttons themselves are intentionally left at their original plain
+   style — data-maa attributes still sit on them (used only to look the
+   element up for the qty-input glow), no visual override here.
+--------------------------------------------------------------------- */
+
+/* --- Generic "pill" meal action buttons: +1 Both / Reset --- */
+.maa-both, .maa-reset{
+  position:relative; border-radius:11px; font-weight:700; letter-spacing:.1px;
+  box-shadow:0 2px 7px -2px rgba(28,39,51,.16), var(--shadow-sm);
+  transition:transform var(--dur-base) var(--ease), filter var(--dur-base) var(--ease),
+             box-shadow .4s var(--ease), background .4s var(--ease),
+             color .4s var(--ease), border-color .4s var(--ease);
+  overflow:hidden;
+}
+.maa-both{
+  background:linear-gradient(135deg, var(--primary-bg), #F3F8FB);
+  border:1px solid #C9DCE8; color:var(--primary-dark);
+}
+.maa-both:hover:not(:disabled){
+  transform:translateY(-1.5px); filter:brightness(1.04);
+  box-shadow:0 6px 14px -3px rgba(51,96,127,.28), var(--shadow-sm);
+  background:linear-gradient(135deg, var(--primary-bg), #EAF2F7);
+}
+.maa-both:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
+.maa-both:disabled{background:var(--surface-alt); border-color:var(--border); color:var(--ink-faint); box-shadow:none;}
+
+.maa-reset{
+  background:linear-gradient(135deg, var(--accent-bg), #FDF3EF);
+  border:1px solid #F2C7C2; color:var(--accent-dark);
+}
+.maa-reset:hover:not(:disabled){
+  transform:translateY(-1.5px); filter:brightness(1.04);
+  box-shadow:0 6px 14px -3px rgba(194,58,58,.22), var(--shadow-sm);
+  background:linear-gradient(135deg, var(--accent-bg), #FCE9E2);
+}
+.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
+
+/* --- Centered confirmation popup with a blurred backdrop ---------------
+   Deliberately NOT a child of the Meals tab's re-rendered markup. The tab
+   redraws itself (optimistic UI, then again on the realtime Firestore
+   echo of the same write), which was destroying/recreating any confirmation
+   living inside it mid-animation and causing a visible jerk. This overlay
+   is appended once to <body> and reused (never duplicated) — it fades in
+   with a blurred dimmed backdrop, holds briefly, then fades back out,
+   completely unaffected by any Meals tab re-render underneath it.
+   The reveal is staged — backdrop, then card, then icon (with a soft
+   expanding ring pulse behind it), then message — instead of everything
+   appearing at once, for a calmer, more premium feel. */
+.maa-popup-overlay{
+  position:fixed; inset:0; z-index:9999;
+  display:flex; align-items:center; justify-content:center; padding:24px;
+  background:rgba(28,39,51,0); pointer-events:none;
+  backdrop-filter:blur(0px); -webkit-backdrop-filter:blur(0px);
+  transition:background .45s var(--ease), backdrop-filter .45s var(--ease), -webkit-backdrop-filter .45s var(--ease);
+}
+.maa-popup-overlay.maa-popup-show{
+  background:rgba(28,39,51,.32);
+  backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
+}
+.maa-popup-card{
+  background:rgba(255,255,255,.72); border:1px solid rgba(255,255,255,.55);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-lg);
+  backdrop-filter:blur(16px) saturate(160%); -webkit-backdrop-filter:blur(16px) saturate(160%);
+  padding:24px 32px; display:flex; flex-direction:column; align-items:center; gap:12px;
+  opacity:0; transform:scale(.88) translateY(6px);
+  transition:opacity .4s var(--ease), transform .4s var(--ease);
+}
+.maa-popup-overlay.maa-popup-show .maa-popup-card{opacity:1; transform:scale(1) translateY(0);}
+.maa-popup-icon-wrap{position:relative; display:flex; align-items:center; justify-content:center; width:52px; height:52px;}
+.maa-popup-icon-ring{
+  position:absolute; inset:0; border-radius:50%; border:2px solid transparent; opacity:0;
+}
+.maa-popup-overlay.maa-popup-success .maa-popup-icon-ring{border-color:var(--success);}
+.maa-popup-overlay.maa-popup-error .maa-popup-icon-ring{border-color:var(--danger);}
+.maa-popup-overlay.maa-popup-show .maa-popup-icon-ring{
+  animation:maaRingPulse .9s cubic-bezier(.22,.7,.28,1) .16s;
+}
+@keyframes maaRingPulse{
+  0%{opacity:.5; transform:scale(.72);}
+  100%{opacity:0; transform:scale(1.55);}
+}
+.maa-popup-icon{
+  position:relative; z-index:1;
+  width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:23px; font-weight:800; color:#fff; flex-shrink:0;
+  opacity:0; transform:scale(.5);
+  transition:opacity .4s cubic-bezier(.34,1.4,.64,1) .1s, transform .4s cubic-bezier(.34,1.4,.64,1) .1s;
+}
+.maa-popup-overlay.maa-popup-show .maa-popup-icon{opacity:1; transform:scale(1);}
+.maa-popup-overlay.maa-popup-success .maa-popup-icon{background:var(--success);}
+.maa-popup-overlay.maa-popup-error .maa-popup-icon{background:var(--danger);}
+.maa-popup-msg{
+  font-size:14.5px; font-weight:700; color:var(--ink); text-align:center; max-width:220px;
+  opacity:0; transform:translateY(3px);
+  transition:opacity .35s var(--ease) .22s, transform .35s var(--ease) .22s;
+}
+.maa-popup-overlay.maa-popup-show .maa-popup-msg{opacity:1; transform:translateY(0);}
+
+/* brief glow on the qty input itself, confirming its typed value was saved */
+.qty-input.maa-glow-success{
+  border-color:var(--success) !important;
+  box-shadow:0 0 0 3px var(--success-bg) !important;
+  transition:border-color .4s var(--ease), box-shadow .4s var(--ease);
+}
+.qty-input.maa-glow-error{
+  border-color:var(--danger) !important;
+  box-shadow:0 0 0 3px var(--danger-bg) !important;
+  transition:border-color .4s var(--ease), box-shadow .4s var(--ease);
+}
