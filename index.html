@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="favicon.png">
 <title>MessLedger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
@@ -72,7 +72,7 @@
     box-shadow:0 8px 20px -6px rgba(46,93,232,.4);
     border-radius:14px;
   }
-  #boot-loader .bl-logo svg{width:100%; height:100%; display:block;}
+  #boot-loader .bl-logo img{width:100%; height:100%; display:block; border-radius:14px;}
   #boot-loader .bl-brand{
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px; letter-spacing:.1px;
     color:#1E2A44; margin-top:6px;
@@ -92,15 +92,7 @@
   <div class="bl-dots"></div>
   <div class="bl-glow"></div>
   <div class="bl-content">
-    <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
-<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
-<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<circle cx="77" cy="77" r="19" fill="#22C08A"/>
-<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg></div></div>
+    <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><img src="favicon.png" alt="" width="100" height="100"></div></div>
     <div class="bl-brand">MessLedger</div>
     <div class="bl-txt">Loading MessLedger…</div>
   </div>
@@ -109,37 +101,63 @@
   <div id="toast-container" class="toast-container"></div>
   <div id="login-screen"></div>
   <div id="main-screen">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo-dot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
-<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
-<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<circle cx="77" cy="77" r="19" fill="#22C08A"/>
-<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg></div>
-        <div class="brand-text">
-          <h1>MessLedger</h1>
-          <div class="sub">Meal &amp; expense tracker</div>
-        </div>
-      </div>
-      <div class="who" id="who-box"></div>
-    </header>
-
-    <div class="month-bar">
-      <label for="month-select"><i class="fas fa-calendar-week"></i> Viewing month</label>
-      <input type="month" id="month-select">
-    </div>
-
     <div class="layout">
-      <nav class="tabs" id="tabs" aria-label="Sections"></nav>
-      <main class="content-wrap">
-        <div id="content"></div>
-      </main>
+      <!-- Sidebar card: logo/branding + nav menu grouped in one container (desktop only —
+           on mobile this collapses via display:contents and the bottom tab bar is unchanged). -->
+      <aside class="sidebar-card" id="sidebar-card">
+        <div class="sidebar-brand">
+          <div class="logo-dot"><img src="favicon.png" alt="" width="20" height="20" style="width:20px; height:20px; flex-shrink:0; display:block; border-radius:5px;"></div>
+          <div class="brand-text">
+            <h1>MessLedger</h1>
+            <div class="sub">Meal &amp; expense tracker</div>
+          </div>
+        </div>
+        <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+      </aside>
+
+      <div class="main-col">
+        <!-- Page header card: notification/balance/profile row + viewing-month
+             row, grouped into one card that lines up with the content cards
+             below it instead of floating separately above the sidebar. -->
+        <div class="page-header-card">
+          <header class="topbar">
+            <div class="brand">
+              <div class="logo-dot"><img src="favicon.png" alt="" width="20" height="20" style="width:20px; height:20px; flex-shrink:0; display:block; border-radius:5px;"></div>
+              <div class="brand-text">
+                <h1>MessLedger</h1>
+                <div class="sub">Meal &amp; expense tracker</div>
+              </div>
+            </div>
+            <div class="header-greeting" id="header-greeting"></div>
+            <div class="who" id="who-box"></div>
+          </header>
+          <div class="month-bar">
+            <label for="month-select"><i class="fas fa-calendar-week"></i> Viewing month</label>
+            <input type="month" id="month-select">
+          </div>
+        </div>
+
+        <main class="content-wrap">
+          <div id="content"></div>
+        </main>
+      </div>
     </div>
     <div class="bottom-nav-spacer" aria-hidden="true"></div>
+
+    <!-- Mobile bottom tab bar: up to 4 quick-access tabs + a "More" tab that
+         opens the sheet below. Rendered by renderTabs() in 07-ui-shell.js.
+         Desktop keeps using the .tabs sidebar list above — this is mobile-only. -->
+    <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="Sections"></nav>
+
+    <div class="more-sheet-backdrop" id="more-sheet-backdrop" onclick="closeMoreSheet()"></div>
+    <div class="more-sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More sections">
+      <div class="more-sheet-handle" aria-hidden="true"></div>
+      <div class="more-sheet-head">
+        <h2>More</h2>
+        <button type="button" class="more-sheet-close" onclick="closeMoreSheet()" aria-label="Close"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="more-sheet-body" id="more-sheet-body"></div>
+    </div>
   </div>
 </div>
 

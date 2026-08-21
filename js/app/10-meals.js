@@ -236,15 +236,36 @@ let mealsRowsExpanded = false;
 
 function renderMeals() {
   const toggle = `
-    <div class="row-between card-header-row">
-      <h2>Meals</h2>
-      <div>
-        <button class="btn secondary ${mealsViewMode==='edit'?'active-toggle':''}" style="margin-top:0;" onclick="setMealsView('edit')">Edit by Date</button>
-        <button class="btn secondary ${mealsViewMode==='history'?'active-toggle':''}" style="margin-top:0;" onclick="setMealsView('history')">All Meals History</button>
+    <div class="meals-header-row card-header-row">
+      <div class="meals-header-title">
+        <div class="meals-header-icon"><i class="fas fa-utensils"></i></div>
+        <div>
+          <h2>Meals</h2>
+          <div class="small-note">Set or update meals for a specific date</div>
+        </div>
+      </div>
+      <div class="meals-header-actions">
+        <button class="btn ${mealsViewMode==='edit'?'':'secondary'}" onclick="setMealsView('edit')"><i class="fas fa-calendar-day"></i> Edit by Date</button>
+        <button class="btn ${mealsViewMode==='history'?'':'secondary'}" onclick="setMealsView('history')"><i class="fas fa-clock-rotate-left"></i> All Meals History</button>
       </div>
     </div>`;
   if (mealsViewMode === 'history') return renderMealsHistory(toggle);
   return renderMealsEdit(toggle);
+}
+
+// Deterministic per-member avatar tint (same member always gets the same
+// color across re-renders and across every tab that shows an avatar).
+// NOTE: this used to hash the member's *name* and take %5, but for real
+// rosters that hash collides often (several names landing on the same
+// bucket), so most avatars ended up the same color instead of visually
+// distinct like intended. Using the member's stable position in
+// state.members instead guarantees neighboring members always get
+// different colors (only wrapping back to the same shade every 5th
+// member), and still stays deterministic since member order doesn't
+// change on its own.
+function memberAvatarClass(memberId) {
+  const idx = state.members.findIndex(x => x.id === memberId);
+  return 'av-' + ((idx >= 0 ? idx : 0) % 5);
 }
 
 function mealLockTime(dateStr) {
@@ -318,6 +339,60 @@ window.addEventListener('resize', () => {
   }, 200);
 });
 
+// Finds whoever's on market duty for a given date + meal (lunch/dinner),
+// using the exact same matching rule as defaultPurchaserIdForDate() in
+// 13-costs.js — weekday from member.marketDay, and marketShift 'both' or
+// the specific meal — just returning the member object here instead of an
+// id, and with no "any duty that day" fallback (that fallback exists there
+// only for the shiftless "Other/Grocery" cost type, which doesn't apply to
+// a Lunch/Dinner menu card).
+function dutyMemberForDateMeal(dateStr, mealType) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return null;
+  const weekday = d.getDay(); // 0=Sunday, matching WEEKDAYS/member.marketDay
+  return (state.members || []).find(m => hasMarketDay(m) && Number(m.marketDay) === weekday && (m.marketShift === 'both' || m.marketShift === mealType)) || null;
+}
+
+// Renders the Lunch/Dinner Menu card for the selected date, sourced entirely
+// from the existing Market Schedule data (whoever's on duty that day/shift,
+// and their marketItems shopping-list string) — no new data is stored here,
+// this is purely a read-only view into 09-dashboard.js's schedule feature.
+// Editing still happens on the Market Schedule tab (superadmin only, same
+// as today) — "+ Add Item" just jumps there.
+function renderMealMenuCard(mealType, dateStr) {
+  const label = mealType === 'lunch' ? 'Lunch Menu' : 'Dinner Menu';
+  const icon = mealType === 'lunch' ? 'fa-sun' : 'fa-moon';
+  const iconClass = mealType === 'lunch' ? 'icon-lunch' : 'icon-dinner';
+  const duty = dutyMemberForDateMeal(dateStr, mealType);
+  const itemsStr = (duty && duty.marketItems) ? duty.marketItems.trim() : '';
+  const items = itemsStr ? itemsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const canEdit = session.role === 'superadmin';
+  const chips = items.map((it, i) => `<div class="menu-item-chip"><span class="menu-item-dot dot-${i%5}"></span>${it}</div>`).join('');
+  const emptyMsg = !duty ?
+    `No one is on ${mealType} duty for this date.` :
+    'No items listed yet.';
+  const dutyLineHtml = duty ?
+    `<div class="menu-card-duty"><i class="fas fa-cart-shopping"></i> ${escapeHtml(duty.name)} is on ${mealType} duty</div>` :
+    '';
+  return `<div class="card menu-card">
+    <div class="menu-card-head">
+      <div class="menu-card-title">
+        <div class="menu-card-icon ${iconClass}"><i class="fas ${icon}"></i></div>
+        <div>
+          <div style="font-weight:700;">${label} <span class="small-note" style="margin:0;">(${dateStr})</span></div>
+          ${dutyLineHtml}
+        </div>
+      </div>
+      <span class="badge" style="background:var(--success-bg); color:var(--success);">${items.length} Item${items.length===1?'':'s'}</span>
+    </div>
+    <div class="menu-items-row">
+      ${chips || `<span class="small-note" style="margin:0;">${emptyMsg}</span>`}
+      ${canEdit ? `<button class="btn secondary menu-add-item-btn" onclick="setTab('schedule')"><i class="fas fa-plus"></i> Add Item</button>` : ''}
+    </div>
+  </div>`;
+}
+
 function renderMealsEdit(headerHtml) {
   const canEditAll = session.role === 'admin' || session.role === 'superadmin';
   const locked = isMealLocked(mealSelectedDate);
@@ -367,12 +442,21 @@ function renderMealsEdit(headerHtml) {
       if (parts.length) addedByInfo = `<div class="small-note" style="text-align:center; margin-top:2px;">${parts.join(' | ')}</div>`;
     }
 
+    const memberRole = m.role || 'member';
+    const rowTotal = (rec.lunch || 0) + (rec.dinner || 0);
+
     return {
       id: m.id,
       html: `<div class="meal-row-grid ${isOwn?'own':''}">
       <div class="mrg-name">
-        ${m.name}${isOwn?' <span class="small-note">(You)</span>':''}
-        ${blocked?`<div class="small-note" style="margin-top:2px; color:var(--danger);">🔒 ${mealBlockReasons(m.id).join(', ')}</div>`:''}
+        <div class="mrg-name-row">
+          <div class="member-avatar ${memberAvatarClass(m.id)}">${(m.name||'?').charAt(0).toUpperCase()}</div>
+          <div class="mrg-name-info">
+            <div class="mrg-name-line">${m.name}${isOwn?' <span class="small-note" style="margin:0;">(You)</span>':''}</div>
+            <span class="badge ${memberRole}">${roleLabel(memberRole)}</span>
+            ${blocked?`<div class="small-note" style="margin-top:2px; color:var(--danger);">🔒 ${mealBlockReasons(m.id).join(', ')}</div>`:''}
+          </div>
+        </div>
       </div>
       <div class="mrg-cell">
         <div class="mrg-cell-main">
@@ -398,9 +482,16 @@ function renderMealsEdit(headerHtml) {
         </div>
         ${canReset ? `<button class="btn secondary mrg-inline-btn mrg-mobile-only maa-reset" data-maa="reset" data-maa-member="${m.id}" data-maa-label="↻ Reset" onclick="resetMealsForMember('${m.id}')">↻ Reset</button>` : ''}
       </div>
+      <div class="mrg-total">
+        <span class="meal-control-label mrg-col-label">Total</span>
+        <span class="mrg-total-value">${rowTotal}</span>
+      </div>
       <div class="mrg-quick">
-        <button class="btn secondary mrg-inline-btn maa-both" data-maa="both" data-maa-member="${m.id}" data-maa-label="+1 Both" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
-        ${canReset ? `<button class="btn secondary mrg-inline-btn maa-reset" data-maa="reset" data-maa-member="${m.id}" data-maa-label="↻ Reset" onclick="resetMealsForMember('${m.id}')">↻ Reset</button>` : ''}
+        <div class="mrg-quick-buttons">
+          <button class="btn secondary mrg-inline-btn maa-both" data-maa="both" data-maa-member="${m.id}" data-maa-label="+1 Both" ${canBoth?'':'disabled'} onclick="changeBothMeals('${m.id}',1)" title="Add 1 lunch + 1 dinner">+1 Both</button>
+          ${canReset ? `<button class="btn secondary mrg-inline-btn maa-reset" data-maa="reset" data-maa-member="${m.id}" data-maa-label="↻ Reset" onclick="resetMealsForMember('${m.id}')">↻ Reset</button>` : ''}
+        </div>
+        <button type="button" class="mrg-kebab" aria-hidden="true" tabindex="-1"><i class="fas fa-ellipsis-vertical"></i></button>
       </div>
     </div>`
     };
@@ -424,63 +515,75 @@ function renderMealsEdit(headerHtml) {
     rows = rowEntries.map(r => r.html).join('');
   }
 
+  // Same underlying lock/permission logic as before — only the markup
+  // (icon + variant class + "pill-badge" for the bold time span) changed.
   let lockMessage = '';
   if (lockEnabled) {
     if (canEditAll) {
       if (locked) {
-        lockMessage = `<div class="small-note" style="color:var(--warning); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏰ Meals for ${mealSelectedDate} are locked (cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}), but you as admin can still edit.</div>`;
+        lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> Meals for ${mealSelectedDate} are locked (cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}), but you as admin can still edit.</div>`;
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
-          lockMessage = `<div class="small-note" style="color:var(--success); border:1px dashed var(--success); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏳ Time left to edit this date: <b>${formatRemaining(remainingTime)}</b> (locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</div>`;
+          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></div>`;
         } else {
-          lockMessage = `<div class="small-note" style="color:var(--warning); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏰ This date is past the lock time, but you as admin can still edit.</div>`;
+          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> This date is past the lock time, but you as admin can still edit.</div>`;
         }
       }
     } else {
       if (locked) {
-        lockMessage = `<div class="small-note" style="color:var(--danger); border:1px dashed var(--danger); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏰ Meals for ${mealSelectedDate} are locked — the cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}. Contact an admin for changes.</div>`;
+        lockMessage = `<div class="meal-lock-pill danger"><i class="fas fa-lock"></i> Meals for ${mealSelectedDate} are locked — the cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}. Contact an admin for changes.</div>`;
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
-          lockMessage = `<div class="small-note" style="color:var(--success); border:1px dashed var(--success); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏳ Time left to edit this date: <b>${formatRemaining(remainingTime)}</b> (locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</div>`;
+          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></div>`;
         } else {
-          lockMessage = `<div class="small-note" style="color:var(--warning); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">⏰ This date is past the lock time, contact an admin for changes.</div>`;
+          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> This date is past the lock time, contact an admin for changes.</div>`;
         }
       }
     }
   } else {
-    lockMessage = `<div class="small-note" style="color:var(--success); border:1px dashed var(--success); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:10px;">🔓 Meal locking is disabled. You can edit any date anytime.</div>`;
+    lockMessage = `<div class="meal-lock-pill success"><i class="fas fa-lock-open"></i> Meal locking is disabled. You can edit any date anytime.</div>`;
   }
 
   // Add date range restriction note for members
   let dateRangeNote = '';
   if (!canEditAll && minDate && maxDate) {
-    dateRangeNote = `<div class="small-note" style="color:var(--ink-soft); margin-bottom:10px;">📅 You can only edit meals for <b>${minDate}</b> (tomorrow).</div>`;
+    dateRangeNote = `<div class="small-note" style="color:var(--ink-soft); margin-bottom:10px;"><i class="fas fa-calendar-day"></i> You can only edit meals for <b>${minDate}</b> (tomorrow).</div>`;
   }
 
   return `
     <div class="card">
       ${headerHtml || ''}
-      <div class="row-between">
-        <div class="small-note" style="margin:0;">Set or update meals for a specific date</div>
-        <input type="date" id="meal-date" value="${mealSelectedDate}" ${minDate ? `min="${minDate}"` : ''} ${maxDate ? `max="${maxDate}"` : ''}>
+      <div class="meals-datebar">
+        <div class="meals-datebar-field">
+          <label for="meal-date">Select Date</label>
+          <input type="date" id="meal-date" value="${mealSelectedDate}" ${minDate ? `min="${minDate}"` : ''} ${maxDate ? `max="${maxDate}"` : ''}>
+        </div>
+        ${lockMessage}
       </div>
       ${dateRangeNote}
-      ${lockMessage}
+      <div class="meal-menu-grid">
+        ${renderMealMenuCard('lunch', mealSelectedDate)}
+        ${renderMealMenuCard('dinner', mealSelectedDate)}
+      </div>
+      <div class="row-between meal-menu-note-row">
+        <div class="small-note" style="margin:0;"><i class="fas fa-circle-info"></i> Only the super admin can edit shopping-list items (set per member's market duty) — everyone else can view them here.</div>
+        <button class="btn secondary" onclick="setTab('schedule')"><i class="fas fa-list"></i> Manage in Market Schedule</button>
+      </div>
       <div class="meal-grid-list">
         <div class="meal-row-grid meal-row-grid-head">
-          <div>Name</div><div>Lunch</div><div>Dinner</div><div>Quick Actions</div>
+          <div>Member</div><div>Lunch</div><div>Dinner</div><div>Total</div><div>Quick Actions</div>
         </div>
         ${rows}
       </div>
-      <div class="summary-grid" style="margin-top:14px; margin-bottom:0;">
-        <div class="summary-box"><div class="label">Total Lunch (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).lunch}</div></div>
-        <div class="summary-box"><div class="label">Total Dinner (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).dinner}</div></div>
-        <div class="summary-box"><div class="label">Total Meals (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).total}</div></div>
-        <div class="summary-box"><div class="label">Total Meals (${currentMonth})</div><div class="value">${totalMealsAll()}</div></div>
+      <div class="meal-summary-grid">
+        <div class="meal-summary-card"><div class="meal-summary-icon icon-lunch"><i class="fas fa-sun"></i></div><div><div class="label">Total Lunch (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).lunch}</div></div></div>
+        <div class="meal-summary-card"><div class="meal-summary-icon icon-dinner"><i class="fas fa-moon"></i></div><div><div class="label">Total Dinner (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).dinner}</div></div></div>
+        <div class="meal-summary-card"><div class="meal-summary-icon icon-total"><i class="fas fa-utensils"></i></div><div><div class="label">Total Meals (${mealSelectedDate})</div><div class="value">${dayMealTotals(mealSelectedDate).total}</div></div></div>
+        <div class="meal-summary-card"><div class="meal-summary-icon icon-month"><i class="fas fa-arrow-trend-up"></i></div><div><div class="label">Total Meals (${currentMonth})</div><div class="value">${totalMealsAll()}</div></div></div>
       </div>
-      <div class="small-note" style="margin-top:10px;">${lockEnabled ? `Members can edit tomorrow's meal only, from BD midnight until ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time the same day. ${canEditAll? 'Admins can override after lock and edit any date. ':''}Use +/− or type a number directly${isFinite(myMaxQty) ? ` (max ${myMaxQty} per meal)` : ' (no maximum for your role)'}.` : 'Meal locking is disabled – all dates are editable anytime.'} These totals update live and help whoever is doing market duty know how many meals to shop for.</div>
+      <div class="meal-info-box"><i class="fas fa-circle-info"></i><div class="small-note">${lockEnabled ? `Members can edit tomorrow's meal only, from BD midnight until ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time the same day. ${canEditAll? 'Admins can override after lock and edit any date. ':''}Use +/− or type a number directly${isFinite(myMaxQty) ? ` (max ${myMaxQty} per meal)` : ' (no maximum for your role)'}.` : 'Meal locking is disabled – all dates are editable anytime.'} These totals update live and help whoever is doing market duty know how many meals to shop for.</div></div>
     </div>`;
 }
 

@@ -115,15 +115,7 @@ function showBootLoader(message) {
     <div class="bl-dots"></div>
     <div class="bl-glow"></div>
     <div class="bl-content">
-      <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
-<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
-<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<circle cx="77" cy="77" r="19" fill="#22C08A"/>
-<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg></div></div>
+      <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><img src="favicon.png" alt="" width="100" height="100"></div></div>
       <div class="bl-brand">MessLedger</div>
       <div class="bl-txt">${message}</div>
     </div>`;
@@ -154,15 +146,7 @@ function renderLogin() {
   s.innerHTML = `
     <div class="login-card">
       <div class="login-brand">
-        <div class="logo-dot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect x="0" y="0" width="100" height="100" rx="20" fill="#2E5DE8"/>
-<rect x="23" y="23" width="54" height="56" rx="5" fill="#FFFFFF"/>
-<rect x="30" y="35" width="26" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="45" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<rect x="30" y="55" width="38" height="3.5" rx="1.75" fill="#2E5DE8" opacity="0.5"/>
-<circle cx="77" cy="77" r="19" fill="#22C08A"/>
-<path d="M67.5 77 L74.5 84 L88 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg></div>
+        <div class="logo-dot"><img src="favicon.png" alt="" width="20" height="20" style="width:100%; height:100%; display:block; border-radius:inherit;"></div>
         <div>
           <h1>MessLedger</h1>
           <div class="login-sub">Meal &amp; expense tracker</div>

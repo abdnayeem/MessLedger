@@ -19,13 +19,79 @@ function renderTopWho() {
   }
   const balText = bal >= 0 ? `৳${Math.round(bal).toLocaleString('en-US')}` : `-৳${Math.round(Math.abs(bal)).toLocaleString('en-US')}`;
   checkLowBalanceNotification(session.userId, bal);
+  const initial = m ? m.name.trim().charAt(0).toUpperCase() : '?';
+  const topMenuHtml = !topProfileMenuOpen ? '' : `
+    <div class="header-profile-menu">
+      <button type="button" onclick="changeMyPin()"><i class="fas fa-key"></i> Change PIN</button>
+      <button type="button" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+    </div>`;
   document.getElementById('who-box').innerHTML = `
     ${renderNotifBell()}
     <span class="mono balance-pill" style="background:${balBg}; color:${balColor}; border-color:${balBorder};">${balText}${bal<state.settings.lowBalanceWarn?' ⚠':''}</span>
-    <span class="role-chip role-${session.role}"><i class="fas fa-user-shield"></i> ${m.name} · ${roleLabel(session.role)}</span>
-    <button class="link-btn" onclick="changeMyPin()"><i class="fas fa-key"></i> Change PIN</button>
-    <button class="link-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+    <div class="header-profile-wrap" id="header-profile-wrap">
+      <button type="button" class="header-profile-btn ${topProfileMenuOpen?'is-open':''}" onclick="toggleTopProfileMenu(event)" aria-label="Account menu" title="Account">
+        <span class="header-profile-avatar">${initial}</span>
+        <span class="header-profile-info">
+          <span class="header-profile-name">${m?escapeHtml(m.name):''}</span>
+          <span class="header-profile-role">${roleLabel(session.role)}</span>
+        </span>
+        <i class="fas fa-chevron-${topProfileMenuOpen?'up':'down'}"></i>
+      </button>
+      ${topMenuHtml}
+    </div>
   `;
+  renderHeaderGreeting(m);
+}
+
+// Fills the empty space on the left of the header row (desktop only — see
+// .header-greeting's display:none base rule) with a time-of-day greeting
+// and a one-line "essential info" summary, instead of leaving it blank
+// next to the notification bell. Read-only reuse of dayMealTotals(), the
+// same helper the dashboard/schedule tabs already use — nothing about the
+// dashboard body itself is touched.
+function renderHeaderGreeting(m) {
+  const el = document.getElementById('header-greeting');
+  if (!el) return;
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Good night';
+  const firstName = m ? m.name.trim().split(/\s+/)[0] : '';
+  let infoLine = '';
+  try {
+    const t = dayMealTotals(todayStr());
+    infoLine = t.total > 0 ? `<i class="fas fa-utensils"></i> ${t.total} meal${t.total===1?'':'s'} logged today · ${t.lunch}L / ${t.dinner}D` : `<i class="fas fa-utensils"></i> No meals logged today yet`;
+  } catch (e) {
+    infoLine = '';
+  }
+  el.innerHTML = `
+    <div class="header-greeting-title">${greeting}${firstName ? ', ' + escapeHtml(firstName) : ''}</div>
+    ${infoLine ? `<div class="header-greeting-sub">${infoLine}</div>` : ''}
+  `;
+}
+
+let topProfileMenuOpen = false;
+// Whether the mobile "More" sheet (extra tabs beyond the 4 quick-access
+// slots in the phone bottom bar) is currently open. See renderMobileTabbar()
+// / openMoreSheet() / closeMoreSheet() below.
+let moreSheetOpen = false;
+
+function toggleTopProfileMenu(e) {
+  if (e) e.stopPropagation();
+  topProfileMenuOpen = !topProfileMenuOpen;
+  if (topProfileMenuOpen) {
+    document.addEventListener('click', closeTopProfileMenuOnOutsideClick);
+  } else {
+    document.removeEventListener('click', closeTopProfileMenuOnOutsideClick);
+  }
+  renderTopWho();
+}
+
+function closeTopProfileMenuOnOutsideClick(e) {
+  const wrap = document.getElementById('header-profile-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    topProfileMenuOpen = false;
+    document.removeEventListener('click', closeTopProfileMenuOnOutsideClick);
+    renderTopWho();
+  }
 }
 
 // Tab configuration with icons
@@ -76,6 +142,23 @@ const tabConfig = {
   }
 };
 
+// Category grouping for the sidebar menu — purely a display grouping on
+// top of tabsForRole()'s existing role filtering below; it doesn't change
+// which tabs a role can see, just how they're labeled/sectioned.
+const tabGroups = {
+  dashboard: 'Main',
+  meals: 'Main',
+  schedule: 'Main',
+  history: 'Main',
+  costs: 'Finance',
+  expenses: 'Finance',
+  deposits: 'Finance',
+  members: 'Admin',
+  loginlog: 'Admin',
+  actionlog: 'Admin',
+  settings: 'Admin'
+};
+
 function tabsForRole() {
   const base = [{
       id: 'dashboard'
@@ -120,17 +203,117 @@ function tabsForRole() {
 
 function renderTabs() {
   const tabs = tabsForRole();
-  document.getElementById('tabs').innerHTML = tabs.map(t => {
+  let lastGroup = null;
+  const itemsHtml = tabs.map(t => {
     const cfg = tabConfig[t.id] || {
       label: t.id,
       icon: 'fa-circle'
     };
+    const group = tabGroups[t.id] || 'Main';
+    const groupLabelHtml = group !== lastGroup ? `<div class="tab-group-label">${group}</div>` : '';
+    lastGroup = group;
     const pinClass = t.id === 'settings' ? ' tab-btn-pinned' : '';
-    return `<button class="tab-btn ${activeTab===t.id?'active':''}${pinClass}" onclick="setTab('${t.id}')">
-      <i class="fas ${cfg.icon}"></i> ${cfg.label}
+    return `${groupLabelHtml}<button class="tab-btn ${activeTab===t.id?'active':''}${pinClass}" onclick="setTab('${t.id}')">
+      <span class="tab-icon-box"><i class="fas ${cfg.icon}"></i></span>
+      <span class="tab-label">${cfg.label}</span>
+      <span class="tab-chevron"><i class="fas fa-chevron-right"></i></span>
+    </button>`;
+  }).join('');
+  document.getElementById('tabs').innerHTML = itemsHtml;
+
+  renderMobileTabbar(tabs);
+}
+
+// ---------------------------------------------------------------------------
+// Mobile bottom tab bar (phones only — desktop keeps using the .tabs sidebar
+// list built above). Replaces the old design, which crammed every tab
+// (up to 11 for a superadmin) into one horizontally-scrolling row with no
+// way to tell there was more off-screen.
+//
+// New layout: the 4 tabs every role shares (Dashboard/Meals/Schedule/
+// History) always get a fixed, evenly-spaced slot — no scrolling, nothing
+// hidden. Anything role-specific beyond that (Finance tabs for admins,
+// Admin tabs for superadmins) collapses into a single "More" slot that
+// opens a bottom sheet, grouped exactly like the desktop sidebar so it's
+// still easy to scan.
+// ---------------------------------------------------------------------------
+function renderMobileTabbar(tabs) {
+  const bar = document.getElementById('mobile-tabbar');
+  if (!bar) return;
+
+  const primary = tabs.slice(0, 4);
+  const rest = tabs.slice(4);
+
+  const mtabBtn = t => {
+    const cfg = tabConfig[t.id] || { label: t.id, icon: 'fa-circle' };
+    return `<button type="button" class="mtab-btn ${activeTab === t.id ? 'active' : ''}" onclick="setTab('${t.id}')">
+      <span class="mtab-icon"><i class="fas ${cfg.icon}"></i></span>
+      <span class="mtab-label">${cfg.label}</span>
+    </button>`;
+  };
+
+  let html = primary.map(mtabBtn).join('');
+
+  if (rest.length) {
+    const restActive = rest.some(t => t.id === activeTab);
+    html += `<button type="button" class="mtab-btn mtab-more ${restActive ? 'active' : ''}" onclick="toggleMoreSheet()" aria-haspopup="true" aria-expanded="${moreSheetOpen ? 'true' : 'false'}">
+      <span class="mtab-icon"><i class="fas fa-ellipsis"></i></span>
+      <span class="mtab-label">More</span>
+    </button>`;
+  }
+
+  bar.innerHTML = html;
+  renderMoreSheetBody(rest);
+}
+
+function renderMoreSheetBody(rest) {
+  const body = document.getElementById('more-sheet-body');
+  if (!body) return;
+  if (!rest.length) {
+    body.innerHTML = '';
+    return;
+  }
+  let lastGroup = null;
+  body.innerHTML = rest.map(t => {
+    const cfg = tabConfig[t.id] || { label: t.id, icon: 'fa-circle' };
+    const group = tabGroups[t.id] || 'More';
+    const groupLabelHtml = group !== lastGroup ? `<div class="more-sheet-group-label">${group}</div>` : '';
+    lastGroup = group;
+    return `${groupLabelHtml}<button type="button" class="more-sheet-item ${activeTab === t.id ? 'active' : ''}" onclick="selectFromMoreSheet('${t.id}')">
+      <span class="more-sheet-item-icon"><i class="fas ${cfg.icon}"></i></span>
+      <span class="more-sheet-item-label">${cfg.label}</span>
+      <i class="fas fa-chevron-right more-sheet-item-chevron"></i>
     </button>`;
   }).join('');
 }
+
+function openMoreSheet() {
+  moreSheetOpen = true;
+  document.getElementById('more-sheet')?.classList.add('open');
+  document.getElementById('more-sheet-backdrop')?.classList.add('open');
+  document.body.classList.add('more-sheet-locked');
+  const moreBtn = document.querySelector('.mtab-more');
+  if (moreBtn) moreBtn.setAttribute('aria-expanded', 'true');
+}
+function closeMoreSheet() {
+  moreSheetOpen = false;
+  document.getElementById('more-sheet')?.classList.remove('open');
+  document.getElementById('more-sheet-backdrop')?.classList.remove('open');
+  document.body.classList.remove('more-sheet-locked');
+  const moreBtn = document.querySelector('.mtab-more');
+  if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
+}
+function toggleMoreSheet() {
+  if (moreSheetOpen) closeMoreSheet();
+  else openMoreSheet();
+}
+function selectFromMoreSheet(id) {
+  closeMoreSheet();
+  setTab(id);
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && moreSheetOpen) closeMoreSheet();
+});
 
 function scrollContentToTop() {
   // On desktop .content-wrap is the independently-scrolling panel; on
@@ -141,7 +324,22 @@ function scrollContentToTop() {
   window.scrollTo(0, 0);
 }
 async function setTab(id) {
+  // Quick crossfade-out of whatever's currently in #content before we
+  // swap tabs. Scoped to setTab (not renderTabContent itself) on purpose:
+  // renderTabContent() is also called from dozens of places elsewhere
+  // (every meal/expense/deposit edit re-renders the current tab to reflect
+  // the change) and those in-place updates should stay instant — only an
+  // actual tab switch should pay the small fade delay below. Without this,
+  // the old tab's content was replaced by the new tab's content in the
+  // same synchronous tick, so the "fade in" of the new content had nothing
+  // to fade in *from* — it just snapped, which is what read as a jhaki.
+  const outgoing = id !== activeTab ? document.getElementById('content') : null;
+  if (outgoing && outgoing.childNodes.length) {
+    outgoing.classList.add('tab-content-leaving');
+    await new Promise(res => setTimeout(res, 130));
+  }
   activeTab = id;
+  if (moreSheetOpen) closeMoreSheet();
   if (id !== 'members') _maDirty = false;
   if (id !== 'settings') _adminMonthAccessDraft = null; // force a fresh draft next time Settings is opened
   renderTabs();
@@ -236,6 +434,14 @@ function renderTabContent() {
     if (!_adminMonthAccessDraft) resetAdminMonthAccessDraft();
     c.innerHTML = renderSettings();
   }
+  // Replay the tab-switch fade/slide-in animation every time. The class is
+  // already present on #content from the previous render, so just adding
+  // it again wouldn't restart the CSS animation — removing it, forcing a
+  // reflow (reading offsetWidth), then re-adding it is what makes the
+  // browser treat it as a fresh animation start each time a tab changes.
+  c.classList.remove('tab-content-anim', 'tab-content-leaving');
+  void c.offsetWidth;
+  c.classList.add('tab-content-anim');
   console.timeEnd('renderTabContent');
 }
 

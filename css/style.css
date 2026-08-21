@@ -49,6 +49,23 @@
   --warning:#8F5F16;
   --warning-bg:#FBF1DF;
 
+  /* Meals-tab-only accent tokens — added to match the reference design's
+     specific palette exactly (brighter blue/amber/purple than the app's
+     muted --primary/--warning text tones), without changing those shared
+     tokens or anything outside the Meals tab. --meals-blue reuses the same
+     hex already used by the logo/boot-loader/theme-color meta tag. */
+  --meals-blue:#2E5DE8;
+  --meals-blue-bg:#E7EDFC;
+  --meals-amber:#D97706;
+  --meals-amber-bg:#FEF3C7;
+  --meals-purple:#7C3AED;
+  --meals-purple-bg:#EDE9FE;
+  /* Lighter/muted purple used for inactive nav items and the month-bar
+     label — a middle step between the vivid --meals-purple (solid/active
+     state) and the pale --meals-purple-bg (tint fills), so "not active"
+     still reads as purple-themed instead of falling back to plain gray. */
+  --meals-purple-soft:#A78BFA;
+
   --radius:14px;
   --radius-sm:9px;
   --radius-lg:18px;
@@ -65,7 +82,7 @@
   --dur-slow:300ms;
   --ease:cubic-bezier(.2,.7,.3,1);
 
-  --nav-h:64px; /* bottom nav height on phones */
+  --nav-h:56px; /* bottom nav height on phones */
   --safe-b:env(safe-area-inset-bottom, 0px);
   --safe-t:env(safe-area-inset-top, 0px);
 }
@@ -214,52 +231,153 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
 .del-btn:hover{text-decoration:underline;}
 .empty{color:var(--ink-faint); font-size:13px; padding:20px 0; text-align:center;}
 
-/* ---------- 6. App shell: topbar, month bar ---------- */
+/* ---------- 6. App shell: page header card (notif/balance/profile row +
+   viewing-month row), grouped into one card ---------- */
+/* Modern SaaS chrome for the sidebar/header/month-selector only — the
+   accent below reuses --meals-blue (the same blue as the app's own
+   logo mark and theme-color), so this "new" palette is really just the
+   brand's own identity color pulled forward into the nav chrome instead
+   of a color invented from nothing. Everything here is scoped to
+   .topbar/.who/.month-bar/.sidebar-card/.tabs — no shared token
+   (--primary, --meals-purple, etc.) used by the dashboard body is
+   redefined, so the main content is untouched. */
 #main-screen{display:none;}
+
+/* The card that wraps both rows. Sticky so it stays pinned while the page
+   (mobile) or .content-wrap (desktop) scrolls beneath it. Margin/left
+   position matches .content-wrap's own inset, so its left edge lines up
+   with the dashboard cards below instead of floating separately. */
+.page-header-card{
+  position:sticky; top:var(--safe-t); z-index:150;
+  flex-shrink:0; /* never let flexbox squeeze this — content-wrap absorbs
+                    height pressure via its own scroll instead. Without
+                    this, a short viewport (small browser window, a
+                    laptop with little vertical space, etc.) could shrink
+                    this card below its content height, showing up as
+                    clipped icons/text instead of the row just staying
+                    full size. */
+  margin:calc(10px + var(--safe-t)) 0 14px;
+  background:#fff; border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-sm);
+  /* No backdrop-filter here on purpose — it silently turns this card into
+     a "containing block" for any position:fixed descendant (the mobile
+     notification panel is one), so that descendant ends up positioned
+     relative to this card's own box instead of the real viewport. Solid
+     background instead of a translucent blur avoids that trap entirely. */
+  /* No overflow:hidden here on purpose — the notification panel and the
+     profile dropdown menu both need to render outside this card's own
+     box (they open below/underneath it), and overflow:hidden would clip
+     them off instead of letting them float over the content below. The
+     rounded corners still look correct without it since nothing inside
+     this card has its own background that would otherwise poke out past
+     them. */
+}
 .topbar{
-  position:sticky; top:0; z-index:150;
   display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
-  padding:calc(12px + var(--safe-t)) 14px 12px;
-  background:rgba(245,247,250,.92); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--border);
+  padding:12px 14px;
 }
 .brand{display:flex; align-items:center; gap:10px; min-width:0;}
-.brand .logo-dot{
-  width:34px; height:34px; border-radius:10px; background:var(--primary); color:#fff;
+.brand .logo-dot, .sidebar-brand .logo-dot{
+  width:34px; height:34px; border-radius:10px; background:var(--meals-blue); color:#fff;
   display:flex; align-items:center; justify-content:center;
-  font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:16px; flex-shrink:0;
+  font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:16px;
+  flex-shrink:0; box-shadow:0 3px 10px -3px rgba(46,93,232,.45);
 }
-.brand h1{font-family:'Space Grotesk', sans-serif; font-size:16px; font-weight:700;}
-.brand .sub{color:var(--ink-faint); font-size:0.7rem;}
-.who{display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+/* iOS/Safari fix: keeps the mark pinned to a fixed 20x20 box regardless of
+   engine quirks (explicit width/height are also set as real attributes in
+   the markup, not just CSS). */
+.brand .logo-dot img, .sidebar-brand .logo-dot img{width:20px; height:20px; flex-shrink:0; display:block; border-radius:5px;}
+.brand h1, .sidebar-brand h1{font-family:'Space Grotesk', sans-serif; font-size:16px; font-weight:700; color:var(--ink);}
+.brand .sub, .sidebar-brand .sub{color:var(--ink-faint); font-size:0.7rem;}
+
+/* Right-aligned header cluster: bell, balance badge, profile — evenly
+   spaced with a shared border rhythm instead of a loose wrap of chips. */
+.who{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto;}
 .balance-pill{
-  font-family:'JetBrains Mono', monospace; font-weight:700; font-size:13.5px; padding:7px 13px; border-radius:20px; border:1px solid transparent;
+  font-family:'JetBrains Mono', monospace; font-weight:700; font-size:13.5px; padding:7px 14px; border-radius:20px; border:1px solid transparent;
   box-shadow:0 1px 3px rgba(28,39,51,0.06);
   letter-spacing:-.01em;
   white-space:nowrap;
 }
-.role-chip{
-  display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; font-size:0.75rem; font-weight:600;
-  background:var(--surface-alt); color:var(--ink-soft); border:1px solid var(--border);
-}
-.role-chip i{font-size:10px;}
-.role-chip.role-superadmin{background:var(--danger-bg); color:var(--danger); border-color:#F2C7C2;}
-.role-chip.role-admin{background:var(--primary-bg); color:var(--primary); border-color:#C9DCE8;}
 .link-btn{font-size:12.5px; color:var(--ink-soft); background:none; border:none; padding:6px 2px; font-weight:600;}
 .link-btn i{margin-right:4px; font-size:11.5px;}
 .link-btn:hover{color:var(--primary);}
 
+/* Greeting + "today at a glance" line that fills the space to the left of
+   the bell on desktop (where the brand used to be before it moved into
+   the sidebar). Hidden on mobile — the brand still lives in .topbar there
+   and there isn't room for both. */
+.header-greeting{display:none;}
+.header-greeting-title{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14.5px; color:var(--ink);}
+.header-greeting-sub{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:1px;}
+.header-greeting-sub i{color:var(--meals-blue); font-size:11px;}
+
+/* Header profile dropdown — avatar + name/role, opens Change PIN / Log Out.
+   Same actions as the sidebar's account card, just reachable from the
+   header on every screen size (the sidebar card is desktop-only). */
+.header-profile-wrap{position:relative;}
+.header-profile-btn{
+  display:flex; align-items:center; gap:8px;
+  padding:5px 10px 5px 5px; border-radius:20px;
+  background:var(--surface); border:1px solid var(--border);
+  transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  min-height:0; max-width:180px;
+}
+.header-profile-btn:hover{background:var(--surface-alt); border-color:#C9D4E8;}
+.header-profile-btn.is-open{background:var(--meals-blue-bg); border-color:#C9D6FA; box-shadow:0 0 0 4px rgba(46,93,232,.08);}
+.header-profile-avatar{
+  flex-shrink:0; width:26px; height:26px; border-radius:50%;
+  background:var(--meals-blue); color:#fff; font-weight:800; font-size:11.5px;
+  display:flex; align-items:center; justify-content:center;
+}
+.header-profile-info{display:none; min-width:0; flex-direction:column; gap:0; text-align:left; line-height:1.15;}
+.header-profile-name{font-size:12px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;}
+.header-profile-role{font-size:10px; color:var(--ink-faint); font-weight:600;}
+.header-profile-btn > i{font-size:10px; color:var(--ink-faint); flex-shrink:0;}
+.header-profile-menu{
+  position:absolute; top:calc(100% + 8px); right:0; left:auto; min-width:170px;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lg); padding:6px; display:flex; flex-direction:column; gap:2px; z-index:220;
+  animation:notif-drop-in .16s cubic-bezier(.2,.7,.3,1);
+}
+.header-profile-menu button{
+  display:flex; align-items:center; gap:8px; background:none; border:none; text-align:left;
+  padding:8px 10px; font-size:13px; font-weight:600; color:var(--ink-soft); border-radius:6px; cursor:pointer; min-height:0;
+}
+.header-profile-menu button:hover{background:var(--surface-alt); color:var(--ink);}
+.header-profile-menu button i{width:14px; color:var(--ink-faint);}
+
+/* Month selector: second row of the page-header-card, divided by a
+   hairline from the row above. The dropdown itself stays a compact,
+   clean pill with a minimal border. */
 .month-bar{
   display:flex; align-items:center; justify-content:space-between; gap:10px;
-  margin:10px 12px 4px; padding:10px 14px; background:var(--surface);
-  border:1px solid var(--border); border-radius:var(--radius-sm); box-shadow:var(--shadow-sm);
+  width:auto; margin:0; padding:10px 14px;
+  background:transparent; border:none; border-top:1px solid var(--border); border-radius:0; box-shadow:none;
 }
-.month-bar label{margin:0; display:flex; align-items:center; gap:7px; font-size:12.5px; white-space:nowrap;}
-.month-bar label i{color:var(--accent-dark);}
-.month-bar input[type=month]{width:auto; min-height:38px; padding:7px 10px; font-size:14px;}
+.month-bar label{margin:0; display:flex; align-items:center; gap:7px; font-size:12px; white-space:nowrap; color:var(--ink-soft); font-weight:600;}
+.month-bar label i{color:var(--meals-blue); font-size:11.5px;}
+.month-bar input[type=month]{
+  width:auto; min-height:32px; padding:5px 12px; font-size:13px; font-weight:600; color:var(--meals-blue);
+  background:var(--meals-blue-bg); border:1px solid transparent; border-radius:999px;
+}
+
+/* main-col: the right-hand flex column holding the page-header-card +
+   the scrollable content — mirrors .sidebar-card as the two children of
+   .layout, so the header card's left/right edges track the content
+   cards' edges exactly. */
+.main-col{display:flex; flex-direction:column; flex:1; min-width:0; width:100%;}
 
 /* ---------- 7. Navigation: bottom bar (phones) → sidebar (desktop) ---------- */
 .layout{display:flex; gap:20px; align-items:flex-start; padding:0 12px;}
+
+/* Sidebar card wraps the logo/branding + nav menu into one container on
+   desktop. On phones it renders as if it weren't there at all
+   (display:contents) — the branding inside it (.sidebar-brand) is
+   hidden and the nav (.tabs) keeps its existing fixed bottom-bar
+   behavior untouched. */
+.sidebar-card{display:contents;}
+.sidebar-brand{display:none;}
+.tab-group-label{display:none;}
 
 .tabs{
   display:flex; flex-direction:row; gap:2px;
@@ -284,10 +402,236 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
 }
 .tab-btn i{font-size:16px; color:var(--ink-faint); transition:color .15s ease, transform .15s ease;}
 .tab-btn:hover{color:var(--ink-soft); background:var(--surface-alt);}
-.tab-btn.active{color:var(--primary); background:var(--primary-bg);}
-.tab-btn.active i{color:var(--primary); transform:translateY(-1px);}
+.tab-btn.active{color:var(--meals-blue); background:var(--meals-blue-bg);}
+/* Mobile echo of the desktop sidebar's solid icon box: a small accent
+   pill sits behind just the icon on the active tab — the row itself only
+   gets a soft tint so the solid accent stays reserved for the one active
+   icon, keeping it the thing your eye lands on instead of everything
+   competing for attention at once. */
+.tab-icon-box{display:flex; align-items:center; justify-content:center; border-radius:8px; padding:2px 9px; transition:background .15s ease;}
+.tab-btn.active .tab-icon-box{background:var(--meals-blue);}
+.tab-btn.active .tab-icon-box i{color:#fff; transform:translateY(-1px);}
+/* Icon/label wrapper spans exist in the markup at every width (desktop
+   sidebar needs them for the icon-box/chevron layout below), but on the
+   mobile bottom bar they should stay invisible wrappers around the same
+   icon-over-label stack this always had — chevron has no room here. */
+.tab-chevron{display:none;}
+
+/* The old .tabs element only ever served as the *sidebar* list once we're
+   past 900px (see the min-width:900px override further down) — on phones
+   it's now fully replaced by .mobile-tabbar below, so hide it there instead
+   of leaving two nav bars in the DOM at once. */
+@media (max-width:899px){
+  .tabs{display:none;}
+}
 
 .content-wrap{flex:1; min-width:0; width:100%; padding:14px 0 8px;}
+
+/* Tab-switch content transition: a quiet fade + slight upward settle
+   every time #content is re-rendered for a new tab, so switching tabs
+   feels like a deliberate transition instead of an instant content swap.
+   Kept short and subtle on purpose — this plays on every tab click, so
+   anything longer/flashier would get old fast. Restarted from JS in
+   renderTabContent() (see 07-ui-shell.js) by toggling this class off/on. */
+.tab-content-anim{animation:tab-content-in var(--dur-slow) var(--ease);}
+@keyframes tab-content-in{
+  from{opacity:0; transform:translateY(6px) scale(.99);}
+  to{opacity:1; transform:translateY(0) scale(1);}
+}
+/* Quick fade+settle *out* of the current tab's content, played for 130ms
+   before setTab() swaps in the new tab (see 07-ui-shell.js). Without this
+   the old content vanished the same instant the new content appeared,
+   so the entrance animation had nothing to visually continue from and
+   read as an abrupt snap rather than a switch. */
+.tab-content-leaving{animation:tab-content-out 130ms var(--ease) forwards;}
+@keyframes tab-content-out{
+  from{opacity:1; transform:translateY(0) scale(1);}
+  to{opacity:0; transform:translateY(-4px) scale(.99);}
+}
+/* Desktop (sidebar nav) gets a slightly slower, more deliberate version of
+   the same fade+slide — the sidebar list stays on screen the whole time
+   (unlike the mobile bar, which is busy animating its own tab bubble), so
+   there's room for the content swap itself to read as a smoother, less
+   snappy transition without feeling sluggish. */
+@media (min-width:900px){
+  .tab-content-anim{animation-duration:480ms;}
+}
+
+/* ---------- 7b. Mobile bottom tab bar + "More" sheet ----------
+   Redesign of the phone navigation: instead of every tab (up to 11 for a
+   superadmin) crammed into one scrolling row with nothing to signal there
+   was more off-screen, the bar now has a fixed, evenly-spaced set of up to
+   5 slots — the 4 tabs every role shares, plus a "More" slot for anything
+   role-specific, which opens a grouped bottom sheet (mirrors the desktop
+   sidebar's grouping) instead of scrolling further into the same row. */
+.mobile-tabbar{
+  display:flex; align-items:stretch;
+  position:fixed; left:0; right:0; bottom:0; z-index:180;
+  background:var(--surface); border-top:1px solid var(--border);
+  padding:8px 4px calc(3px + var(--safe-b));
+  box-shadow:0 -6px 20px -8px rgba(28,39,51,.12);
+  overflow:visible;
+}
+@media (min-width:900px){
+  .mobile-tabbar, .more-sheet, .more-sheet-backdrop{display:none !important;}
+}
+.mtab-btn{
+  position:relative;
+  flex:1 1 0; min-width:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  background:transparent; border:none; border-radius:var(--radius-sm);
+  padding:0 2px 4px; margin:0 1px;
+  font-size:10.5px; font-weight:600; color:var(--ink-faint);
+  transition:color .15s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+/* Icon sits in a plain circular slot normally; on the active tab it grows
+   and tints in place, gaining a soft glow — a clear focal point without
+   the icon ever crossing the bar's own top border line (it stays fully
+   inside the bar's box at every size).
+
+   NOTE ON THE ANIMATION: renderMobileTabbar() rebuilds this whole bar's
+   innerHTML from scratch on every tab switch (see 07-ui-shell.js), so the
+   active button is always a *brand-new* DOM node — a `transition` on it
+   has no "before" state to animate from and never actually plays. Newly
+   inserted nodes DO auto-play `animation` keyframes, though, so the pop-in
+   below (mtab-pop / mtab-blob-pop) is what actually gives tab switching
+   its motion; the transitions stay only for the (non-active) hover/press
+   states where a real before/after exists. */
+.mtab-icon{
+  display:flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border-radius:50%;
+  position:relative; z-index:2;
+  transition:background .15s ease, transform .15s ease;
+}
+.mtab-icon i{font-size:16px; color:var(--ink-faint); transition:color .15s ease;}
+.mtab-label{
+  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  line-height:1.1;
+  transition:color .15s ease, font-weight .15s ease;
+}
+.mtab-btn:active .mtab-icon{transform:scale(.9);}
+.mtab-btn.active{color:var(--meals-blue);}
+.mtab-btn.active .mtab-label{font-weight:700; animation:mtab-label-pop var(--dur-base) var(--ease);}
+.mtab-btn.active .mtab-icon{
+  /* Grows in place (no vertical lift) so it never crosses the bar's
+     border-top line — stays a clearly "raised" focal point without ever
+     leaving the bar's own box. */
+  width:38px; height:38px;
+  background:linear-gradient(160deg, #fff, #F4F7FF);
+  box-shadow:0 6px 14px -5px rgba(46,93,232,.4);
+  animation:mtab-pop 420ms var(--ease);
+}
+/* The soft light-blue "blob" behind the white circle — wider and a bit
+   taller than the circle itself and blurred at the edges, so it peeks out
+   past the circle's silhouette on both sides instead of glowing evenly
+   all the way around it like a halo would. Sits behind the white circle
+   (z-index 1 vs. the icon's 2), also fully inside the bar. */
+.mtab-btn.active::before{
+  content:'';
+  position:absolute; z-index:1;
+  left:50%; top:50%;
+  width:52px; height:42px;
+  transform:translate(-50%, -50%);
+  background:radial-gradient(circle, var(--meals-blue-bg) 0%, rgba(231,237,252,0) 72%);
+  border-radius:50%;
+  filter:blur(4px);
+  animation:mtab-blob-pop 420ms var(--ease);
+}
+.mtab-btn.active .mtab-icon i{color:var(--meals-blue); font-size:18px;}
+/* A thin bright dot under the label — a small modern touch (à la
+   iOS/Material bottom-nav indicators) confirming which slot is active
+   even at a glance, without competing with the bubble above it. */
+.mtab-btn.active .mtab-label::after{
+  content:''; display:block; width:4px; height:4px; border-radius:50%;
+  background:var(--meals-blue); margin:3px auto 0;
+  animation:mtab-dot-pop 420ms var(--ease) 60ms backwards;
+}
+@keyframes mtab-pop{
+  0%{transform:scale(.6); opacity:.4;}
+  55%{transform:scale(1.08);}
+  100%{transform:scale(1); opacity:1;}
+}
+@keyframes mtab-blob-pop{
+  0%{transform:translate(-50%, -50%) scale(.3); opacity:0;}
+  100%{transform:translate(-50%, -50%) scale(1); opacity:1;}
+}
+@keyframes mtab-label-pop{
+  0%{transform:translateY(3px); opacity:.5;}
+  100%{transform:translateY(0); opacity:1;}
+}
+@keyframes mtab-dot-pop{
+  0%{transform:scale(0); opacity:0;}
+  100%{transform:scale(1); opacity:1;}
+}
+
+
+/* Backdrop + sheet for the tabs that don't fit in the primary 4 slots. */
+.more-sheet-backdrop{
+  position:fixed; inset:0; z-index:400;
+  background:rgba(15,23,42,.45);
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity var(--dur-base) var(--ease), visibility var(--dur-base) var(--ease);
+}
+.more-sheet-backdrop.open{opacity:1; visibility:visible; pointer-events:auto;}
+
+.more-sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:401;
+  max-height:min(72vh, 560px);
+  display:flex; flex-direction:column;
+  background:var(--surface);
+  border-radius:20px 20px 0 0;
+  box-shadow:0 -12px 32px -10px rgba(15,23,42,.28);
+  padding:8px 0 calc(10px + var(--safe-b));
+  transform:translateY(100%);
+  transition:transform var(--dur-slow) var(--ease);
+}
+.more-sheet.open{transform:translateY(0);}
+.more-sheet-handle{
+  width:36px; height:4px; border-radius:2px; background:var(--border);
+  margin:2px auto 10px;
+}
+.more-sheet-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px 8px; border-bottom:1px solid var(--border);
+}
+.more-sheet-head h2{margin:0; font-size:15px; font-weight:700; color:var(--ink);}
+.more-sheet-close{
+  display:flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border-radius:50%; border:none;
+  background:var(--surface-alt); color:var(--ink-soft); font-size:14px;
+}
+.more-sheet-body{overflow-y:auto; padding:6px 8px 4px; -webkit-overflow-scrolling:touch;}
+.more-sheet-group-label{
+  padding:12px 10px 4px; font-size:11px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.more-sheet-group-label:first-child{padding-top:6px;}
+.more-sheet-item{
+  width:100%; display:flex; align-items:center; gap:12px;
+  background:transparent; border:none; border-radius:var(--radius-sm);
+  padding:11px 10px; font-size:14px; font-weight:600; color:var(--ink);
+  text-align:left;
+}
+.more-sheet-item:active{background:var(--surface-alt);}
+.more-sheet-item.active{background:var(--meals-blue-bg); color:var(--meals-blue);}
+.more-sheet-item-icon{
+  flex:none; display:flex; align-items:center; justify-content:center;
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt);
+  color:var(--ink-soft); font-size:14px;
+}
+.more-sheet-item.active .more-sheet-item-icon{background:var(--meals-blue); color:#fff;}
+.more-sheet-item-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.more-sheet-item-chevron{flex:none; font-size:11px; color:var(--ink-faint); opacity:.6;}
+.more-sheet-item.active .more-sheet-item-chevron{color:var(--meals-blue); opacity:1;}
+
+/* Lock background scroll while the sheet is open. */
+body.more-sheet-locked{overflow:hidden;}
+
+@media (max-width:359px){
+  .mtab-btn{font-size:9.5px;}
+  .mtab-icon{width:30px;}
+}
 
 /* ---------- 8. Cards, layout helpers ---------- */
 .card{
@@ -511,35 +855,302 @@ tbody tr:hover{background:var(--surface-alt);}
   .member-info-desktop-table{display:block;}
 }
 
-/* Weekly Market Schedule: one ultra-compact card per member on phones —
-   name+active on line 1, phone on line 2, day/shift/next-turn as a single
-   chip line, then the shopping list. Desktop keeps the original table. */
-.sched-list{margin:0 -8px;}
-.sched-card{
-  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:10px 12px; margin-bottom:8px;
+/* =================================================================
+   MARKET SCHEDULE PAGE — dedicated design system for the "Market
+   Schedule" tab only (renderSchedule() in js/app/09-dashboard.js).
+   Mirrors the app's existing tokens (--primary/--success/--warning/
+   --danger, --radius*, --shadow*) so it reads as the same product,
+   just laid out closer to the reference: a two-column desktop grid
+   (main column + a slim stats/tips aside) that collapses to a single
+   stacked column on phones, with the weekly table becoming member
+   cards below 900px — same breakpoint the rest of the app already
+   uses for its table→card collapse.
+   ================================================================= */
+.msched-header{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  margin-bottom:16px;
 }
-.sched-row{display:flex; align-items:center; gap:8px;}
-.sched-row-top{justify-content:space-between; margin-bottom:4px;}
-.sched-name{font-size:15px; font-weight:700; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.sched-row-top .badge{flex-shrink:0; border-radius:20px; font-size:10px;}
-.sched-phone{font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;}
-.sched-meta{
-  font-size:12.5px; font-weight:600; color:var(--ink); flex-wrap:wrap; row-gap:3px;
-  background:var(--surface-alt); border-radius:var(--radius-sm); padding:6px 9px; margin-bottom:2px;
+.msched-title{
+  font-family:'Space Grotesk', sans-serif; font-size:20px; font-weight:700; color:var(--ink);
 }
-.sched-label{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-faint); margin:8px 0 4px;}
-.sched-textarea{
-  width:100%; min-height:44px; max-height:70px; font-size:13px; padding:7px 9px;
-  border:1px solid var(--border); border-radius:var(--radius-sm); font-family:inherit; resize:vertical;
+.msched-subtitle{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+.msched-header-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap; width:100%;}
+.msched-assign-btn{
+  margin-top:0; padding:11px 16px; white-space:nowrap; flex:1 1 auto;
+  background:var(--meals-purple); border-color:var(--meals-purple);
 }
-.sched-save-btn{width:100%; margin-top:6px; min-height:36px; padding:7px 12px; font-size:13px;}
-.sched-items-readonly{font-size:12.5px; color:var(--ink-soft); line-height:1.4;}
-.schedule-desktop-table{display:none;}
+.msched-assign-btn:hover{background:#6D28D9; border-color:#6D28D9;}
+.msched-assign-btn i{margin-right:6px;}
+.msched-filter-toggle-btn{
+  width:40px; height:40px; flex-shrink:0; border-radius:var(--radius-sm);
+  border:1px solid var(--border); background:var(--card-bg,#fff); color:var(--ink-soft);
+  display:flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer;
+}
+.msched-filter-toggle-btn:hover{background:var(--surface-alt); color:var(--primary);}
+.msched-filter-toggle-btn.is-active{background:var(--meals-purple-bg); color:var(--meals-purple); border-color:#DDD3FB;}
+@media (min-width:640px){
+  .msched-header-actions{width:auto;}
+  .msched-assign-btn{flex:0 0 auto;}
+}
+
+.msched-grid{
+  display:grid; grid-template-columns:1fr; gap:14px;
+  grid-template-areas:
+    "today"
+    "next"
+    "overview"
+    "tips"
+    "full";
+}
+.msched-slot-today{grid-area:today;}
+.msched-slot-next{grid-area:next;}
+.msched-slot-overview{grid-area:overview;}
+.msched-slot-tips{grid-area:tips;}
+.msched-full{grid-area:full;}
 @media (min-width:900px){
-  .sched-list{display:none;}
-  .schedule-desktop-table{display:block;}
+  .msched-slot-today, .msched-slot-next, .msched-slot-overview, .msched-slot-tips{display:flex; flex-direction:column;}
+  .msched-slot-today > *, .msched-slot-next > *, .msched-slot-overview > *, .msched-slot-tips > *{flex:1 1 auto;}
 }
+
+/* ---- Today / Next duty banner cards ---- */
+.msched-banner{
+  border-radius:var(--radius); padding:14px 16px; border:1px solid; box-shadow:var(--shadow-sm);
+}
+@media (min-width:900px){
+  .msched-banner{height:100%; display:flex; flex-direction:column; justify-content:center;}
+  .msched-banner .msched-shop-strip{margin-top:auto; margin-bottom:0;}
+}
+.msched-banner.is-today{background:var(--success-bg); border-color:#C8ECD6;}
+.msched-banner.is-next{background:var(--warning-bg); border-color:#FCE3B0;}
+.msched-banner.is-empty{background:var(--surface); border-color:var(--border);}
+.msched-banner-head{display:flex; align-items:center; gap:8px; font-size:14.5px; font-weight:700; margin-bottom:2px;}
+.msched-banner.is-today .msched-banner-head{color:var(--success);}
+.msched-banner.is-next .msched-banner-head{color:#8F5F16;}
+.msched-banner-sub{font-size:12px; color:var(--ink-soft); margin-bottom:10px;}
+.msched-duty-list{display:flex; flex-direction:column; gap:8px;}
+@media (min-width:640px){
+  .msched-duty-list{flex-direction:row; flex-wrap:wrap;}
+  .msched-duty-list .msched-duty-item{flex:1 1 240px;}
+}
+.msched-duty-item{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:9px 12px; display:flex; flex-direction:column; gap:6px;
+}
+.msched-duty-item-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; flex-wrap:wrap;}
+.msched-duty-person{display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 auto;}
+.msched-duty-textcol{min-width:0; flex:1 1 auto;}
+.msched-duty-name{font-size:14.5px; font-weight:700; color:var(--ink);}
+.msched-duty-meta{font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
+.msched-duty-meta .msched-nowrap{white-space:nowrap;}
+.msched-duty-items{
+  font-size:11.5px; color:var(--ink-soft); background:var(--surface-alt); border-radius:20px;
+  padding:3px 10px; display:inline-flex; align-items:center; gap:5px; width:fit-content; max-width:100%;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.msched-status-badge{
+  flex-shrink:0; display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px;
+  font-size:10.5px; font-weight:700; white-space:nowrap; border:1px solid transparent;
+}
+.msched-status-badge.ok{background:var(--success-bg); color:var(--success); border-color:#C8ECD6;}
+.msched-status-badge.overdue{background:var(--danger-bg); color:var(--danger); border-color:#F2C7C2;}
+.msched-status-badge.upcoming{background:var(--surface); color:var(--warning); border-color:#FCE3B0;}
+.msched-banner-icon{
+  width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+  font-size:12px; flex-shrink:0;
+}
+.msched-banner-icon.today{background:rgba(255,255,255,.6); color:var(--success);}
+.msched-banner-icon.next{background:var(--accent-bg); color:var(--accent-dark);}
+.msched-status-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:5px; flex-shrink:0;}
+.msched-status-pill{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px;
+  font-size:10.5px; font-weight:700; white-space:nowrap; text-transform:uppercase; letter-spacing:.3px;
+}
+.msched-status-pill.today{background:var(--success-bg); color:var(--success); border:1px solid #C8ECD6;}
+.msched-status-box{
+  font-size:11px; font-weight:600; padding:4px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink-soft); white-space:nowrap; text-transform:uppercase; letter-spacing:.3px;
+}
+.msched-status-box.next{color:var(--warning); border-color:#FCE3B0;}
+.msched-overdue-box{
+  background:var(--danger-bg); border:1px solid #F2C7C2; border-radius:10px; padding:6px 10px;
+  text-align:right; flex-shrink:0;
+}
+.msched-overdue-box .l1{
+  font-size:11px; font-weight:700; color:var(--danger); display:flex; align-items:center;
+  gap:5px; justify-content:flex-end; white-space:nowrap; text-transform:uppercase; letter-spacing:.3px;
+}
+.msched-overdue-box .l2{font-size:10px; color:var(--danger); opacity:.85; margin-top:2px; white-space:nowrap; text-transform:uppercase; letter-spacing:.2px;}
+.msched-items-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:2px;}
+.msched-items-label{
+  font-size:11px; font-weight:700; color:var(--ink-soft); display:inline-flex; align-items:center;
+  gap:4px; flex-shrink:0;
+}
+.msched-items-label i{color:#D4A017;}
+.msched-item-chip{font-size:11px; background:var(--surface-alt); color:var(--ink-soft); border-radius:20px; padding:2px 9px;}
+.msched-banner.is-today .msched-item-chip{background:rgba(255,255,255,.7);}
+.msched-next-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px;}
+.msched-cal-btn{
+  align-self:flex-start; margin-top:0; min-height:0; padding:6px 12px; font-size:11.5px;
+  background:var(--surface); color:var(--ink); border:1px solid var(--border); box-shadow:none;
+}
+.msched-cal-btn:hover{background:var(--surface-alt); box-shadow:none; transform:none;}
+.msched-cal-btn.right{align-self:flex-end;}
+.msched-shop-strip{
+  margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:9px 12px;
+}
+.msched-shop-strip-text{font-size:12.5px; color:#92400E; font-weight:600;}
+.msched-shop-strip-text b{font-size:16px;}
+.msched-shop-strip-link{white-space:nowrap; font-size:12px; font-weight:700; color:#92400E;}
+.msched-shop-strip-link i{margin-left:4px;}
+
+/* ---- Quick Overview + Tips (aside) ---- */
+.msched-card-title{
+  display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:12px;
+}
+.msched-card-title i{color:var(--primary); font-size:13px;}
+.msched-overview-list{display:flex; flex-direction:column;}
+@media (min-width:900px){
+  .msched-slot-overview .card{height:100%; display:flex; flex-direction:column; justify-content:center; margin-bottom:0;}
+}
+.msched-overview-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:7px 0; border-bottom:1px solid var(--border);
+}
+.msched-overview-row:first-child{padding-top:0;}
+.msched-overview-row:last-child{border-bottom:none; padding-bottom:0;}
+.msched-overview-left{display:flex; align-items:center; gap:9px; font-size:13px; font-weight:600; color:var(--ink);}
+.msched-overview-icon{
+  width:26px; height:26px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:11px;
+}
+.msched-overview-icon.lunch{background:var(--meals-amber-bg); color:var(--meals-amber);}
+.msched-overview-icon.dinner{background:var(--meals-purple-bg); color:var(--meals-purple);}
+.msched-overview-icon.total{background:var(--accent-bg); color:var(--accent-dark);}
+.msched-overview-icon.members{background:var(--meals-blue-bg); color:var(--meals-blue);}
+.msched-overview-value{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:var(--ink); flex-shrink:0;}
+
+.msched-tips-card{background:var(--meals-purple-bg); border-color:transparent;}
+.msched-tips-card .msched-card-title{color:var(--meals-purple);}
+.msched-tips-card .msched-card-title i{color:var(--meals-purple);}
+.msched-tips-list{display:flex; flex-direction:column; gap:10px; padding:0; margin:0; list-style:none;}
+.msched-tips-list li{display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--ink-soft); line-height:1.4;}
+@media (min-width:900px){
+  .msched-tips-card{height:100%; display:flex; flex-direction:column; justify-content:center; margin-bottom:0;}
+}
+.msched-tips-list i{color:var(--ink-faint); font-size:11px; margin-top:2px; flex-shrink:0;}
+
+/* ---- Weekly Market Schedule: toolbar ---- */
+.msched-toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+.msched-toolbar.is-collapsed{display:none;}
+.msched-toolbar .search-input{flex:1 1 200px;}
+.msched-toolbar select{width:auto; min-height:40px; padding:8px 10px; font-size:12.5px;}
+.msched-icon-btn{
+  margin-top:0; min-height:40px; width:40px; padding:0; flex-shrink:0;
+  background:var(--surface); color:var(--ink-soft); border:1px solid var(--border); box-shadow:none;
+}
+.msched-icon-btn:hover{background:var(--surface-alt); color:var(--primary); box-shadow:none; transform:none;}
+.msched-icon-btn.is-active{background:var(--primary-bg); color:var(--primary); border-color:#C9DCE8;}
+
+/* ---- Weekly schedule table (desktop) ---- */
+.msched-table-wrap{display:none;}
+.msched-action-btn{
+  width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-soft); font-size:12px; display:inline-flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.msched-action-btn:hover{background:var(--surface-alt); color:var(--primary); border-color:#C9DCE8;}
+.msched-action-btn.danger:hover{background:var(--danger-bg); color:var(--danger); border-color:#F2C7C2;}
+.msched-table-name{display:flex; align-items:center; gap:10px; min-width:0;}
+.msched-table-name .name-txt{font-weight:600; color:var(--ink); font-size:13.5px;}
+.msched-inline-edit{display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);}
+.msched-inline-edit-row{display:flex; gap:6px;}
+.msched-inline-edit select{min-height:34px; padding:5px 8px; font-size:12px;}
+.msched-items-textarea{
+  width:180px; max-width:100%; font-size:12.5px; padding:6px 8px; border:1px solid var(--border);
+  border-radius:var(--radius-sm); font-family:inherit; resize:vertical;
+}
+.msched-items-save{margin-top:6px; padding:4px 10px; font-size:11px; min-height:0;}
+
+/* ---- Weekly schedule cards (mobile, <900px) ---- */
+.msched-list{display:flex; flex-direction:column; gap:10px;}
+.msched-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:12px; box-shadow:var(--shadow-sm);
+}
+.msched-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:8px;}
+.msched-card-person{display:flex; align-items:center; gap:10px; min-width:0;}
+.msched-card-name{font-size:14.5px; font-weight:700; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.msched-card-phone{font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
+.msched-card-actions{display:flex; gap:6px; flex-shrink:0;}
+.msched-card-meta{
+  display:flex; flex-wrap:wrap; gap:6px; font-size:11.5px; font-weight:600; color:var(--ink);
+  background:var(--surface-alt); border-radius:var(--radius-sm); padding:7px 9px; margin-bottom:2px;
+}
+.msched-card-meta > span{display:inline-flex; align-items:center; gap:4px;}
+.msched-card-next{font-size:12px; margin-top:6px;}
+.msched-card-items{font-size:12px; color:var(--ink-soft); margin-top:6px; line-height:1.4;}
+.msched-card-items b{color:var(--ink-faint); font-weight:700; text-transform:uppercase; font-size:10px; letter-spacing:.3px; display:block; margin-bottom:2px;}
+
+@media (min-width:900px){
+  .msched-grid{
+    grid-template-columns:1fr 280px; align-items:stretch;
+    grid-template-areas:
+      "today    overview"
+      "next     tips"
+      "full     full";
+  }
+  .msched-list{display:none;}
+  .msched-table-wrap{display:block;}
+}
+@media (max-width:899px){
+  .msched-card .msched-action-btn{width:38px; height:38px; font-size:13px;}
+}
+
+/* ---- Bottom duty-statistics strip ---- */
+.msched-stat-strip{
+  display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:14px;
+}
+@media (min-width:640px){
+  .msched-stat-strip{grid-template-columns:repeat(4, 1fr);}
+}
+.msched-stat-strip-item{
+  display:flex; align-items:center; gap:10px;
+  background:var(--surface-alt); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:11px 12px;
+}
+.msched-stat-strip-icon{
+  width:32px; height:32px; border-radius:9px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:13px;
+  background:var(--primary-bg); color:var(--primary);
+}
+.msched-stat-strip-icon.warn{background:var(--warning-bg); color:var(--warning);}
+.msched-stat-strip-icon.success{background:var(--success-bg); color:var(--success);}
+.msched-stat-strip-value{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:var(--ink); line-height:1.2;}
+.msched-stat-strip-label{font-size:10px; color:var(--ink-faint); font-weight:600;}
+.msched-footnote{
+  display:flex; align-items:flex-start; gap:8px; margin-top:14px; padding:10px 12px;
+  background:var(--primary-bg); border-radius:var(--radius-sm); font-size:12px; color:var(--primary-dark); line-height:1.5;
+}
+.msched-footnote i{margin-top:1px; flex-shrink:0;}
+
+/* ---- Assign / Edit Market Duty modal ---- */
+.msched-modal-overlay{
+  position:fixed; inset:0; z-index:9997; display:none; align-items:center; justify-content:center; padding:16px;
+  background:rgba(15,23,42,0.55); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+}
+.msched-modal{
+  width:100%; max-width:420px; max-height:90vh; overflow-y:auto;
+  background:var(--surface); border-radius:var(--radius-lg); padding:22px 20px;
+  box-shadow:var(--shadow-lg); animation:mschedModalPop .22s ease-out;
+}
+@keyframes mschedModalPop{ from{opacity:0; transform:translateY(10px) scale(.97);} to{opacity:1; transform:translateY(0) scale(1);} }
+.msched-modal h2{display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; margin-bottom:16px;}
+.msched-modal h2 i{color:var(--primary); font-size:14px;}
+.msched-modal label{margin:12px 0 5px;}
+.msched-modal label:first-of-type{margin-top:0;}
+.msched-modal-actions{display:flex; gap:10px; margin-top:18px;}
+.msched-modal-actions .btn{flex:1; margin-top:0;}
 
 /* ---------- 10. Data display: summary boxes, badges, stepper ---------- */
 .summary-grid{display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:16px;}
@@ -577,10 +1188,24 @@ tbody tr:hover{background:var(--surface-alt);}
    own stacked card — no separate markup needed for the two breakpoints. */
 .meal-grid-list{display:flex; flex-direction:column; gap:10px;}
 .meal-row-grid{
-  display:grid; grid-template-columns:1fr; gap:10px;
+  display:grid; grid-template-columns:1fr auto; gap:10px 12px;
+  grid-template-areas:
+    "name total"
+    "lunch lunch"
+    "dinner dinner"
+    "quick quick";
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:13px 14px; box-shadow:var(--shadow-sm);
 }
+/* Structural placement for the mobile card layout above — matches
+   .meal-row-grid's markup order (name, lunch cell, dinner cell, total,
+   quick actions) so Total can sit top-right next to the name instead of
+   at the bottom, without touching the HTML/JS that generates the row. */
+.meal-row-grid > :nth-child(1){grid-area:name;}
+.meal-row-grid > :nth-child(2){grid-area:lunch;}
+.meal-row-grid > :nth-child(3){grid-area:dinner;}
+.meal-row-grid > :nth-child(4){grid-area:total; align-self:center; justify-self:end;}
+.meal-row-grid > :nth-child(5){grid-area:quick;}
 .meal-row-grid.own{background:var(--primary-bg); border-color:#C9DCE8;}
 .meal-row-grid-head{display:none;} /* header row is desktop-only, see below */
 .mrg-name{font-weight:600; color:var(--ink); display:flex; flex-direction:column; align-items:flex-start;}
@@ -593,13 +1218,42 @@ tbody tr:hover{background:var(--surface-alt);}
    Hidden on mobile — phones keep the buttons inline under Lunch/Dinner. */
 .mrg-quick{display:none;}
 
+/* Mobile "your row first, Load More for everyone else" wrapper — this had
+   NO styling at all before, which is exactly why the gap looked
+   inconsistent: the own-row card is a direct child of .meal-grid-list so
+   it got that container's 10px flex gap, but every other member's card
+   sits inside this wrapper div, which had no gap of its own — so those
+   cards just touched each other directly. Also gives the collapsed state
+   (before "Load More" is tapped) something to actually collapse against,
+   and styles the button itself. */
+.member-stat-extra{
+  display:flex; flex-direction:column; gap:10px;
+  max-height:0; overflow:hidden;
+  transition:max-height .4s ease;
+}
+.member-stat-extra.expanded{max-height:8000px;}
+.member-stat-loadmore-btn{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; margin-top:2px; padding:11px 14px;
+  background:var(--surface); border:1px dashed var(--border); border-radius:var(--radius-sm);
+  color:var(--ink-soft); font-weight:700; font-size:12.5px; letter-spacing:.2px;
+  cursor:pointer; transition:background .2s ease, border-color .2s ease, color .2s ease;
+}
+.member-stat-loadmore-btn:hover{background:var(--surface-alt); border-color:#C9DCE8; color:var(--primary-dark);}
+
 @media (min-width:900px){
   .meal-grid-list{gap:0; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden;}
   .meal-row-grid{
-    grid-template-columns:1fr 1.6fr 1.6fr auto; /* Name / Lunch / Dinner / Quick Actions */
+    grid-template-columns:1.3fr 1.6fr 1.6fr .7fr auto; /* Name / Lunch / Dinner / Total / Quick Actions */
+    grid-template-areas:none; /* mobile-only areas (see above) don't apply at desktop width */
     align-items:center; gap:16px; padding:11px 16px;
     border:none; border-radius:0; box-shadow:none; border-bottom:1px solid var(--border);
   }
+  /* Desktop keeps its original auto-placement (DOM order = column order),
+     so the mobile-only named-area assignment above must not carry over. */
+  .meal-row-grid > :nth-child(1), .meal-row-grid > :nth-child(2),
+  .meal-row-grid > :nth-child(3), .meal-row-grid > :nth-child(4),
+  .meal-row-grid > :nth-child(5){grid-area:auto; align-self:center; justify-self:stretch;}
   .meal-row-grid:last-child{border-bottom:none;}
   .meal-row-grid-head{
     display:grid; background:var(--surface-alt); color:var(--ink-faint);
@@ -612,7 +1266,17 @@ tbody tr:hover{background:var(--surface-alt);}
      their own right-hand column: +1 Both on top, Reset underneath it
      (Reset only ever renders for a super admin — see app.js canReset). */
   .mrg-mobile-only{display:none;}
-  .mrg-quick{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+  .mrg-quick{display:flex; flex-direction:row; align-items:center; gap:10px;}
+  .mrg-quick-buttons{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+}
+/* Visual-only placeholder to match the reference's per-row ⋮ icon — not
+   wired to any action yet, so it's unfocusable/non-interactive on purpose. */
+.mrg-kebab{
+  display:none; width:28px; height:28px; border-radius:6px; border:none; background:transparent;
+  color:var(--ink-faint); font-size:14px; align-items:center; justify-content:center; cursor:default;
+}
+@media (min-width:900px){
+  .mrg-kebab{display:flex;}
 }
 
 .badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;}
@@ -750,15 +1414,14 @@ tbody tr:hover{background:var(--surface-alt);}
    covering the page. */
 .notif-backdrop{position:fixed; inset:0; background:transparent; z-index:299;}
 
-/* Card anchored under the header. On phones the topbar can wrap to a
-   second line (long balance figure, role chip, etc — see --topbar-h in
-   app.js), so the panel is pinned to the viewport just below the header's
-   real rendered height instead of to the tiny bell icon — anchoring to the
-   bell there let the balance pill / role chip peek out from behind it
-   whenever the header wrapped. Desktop's topbar never wraps, so there it's
-   anchored directly under the bell instead (see media query below). */
+/* Card anchored under the header. On phones it's pinned to the actual
+   viewport edge (not the bell icon) — the bell sits well left of the
+   screen's right edge in the header row, so anchoring a 360px-wide panel
+   to it would run the panel off the left side of a narrow screen instead.
+   Desktop has room to anchor it precisely to the bell instead (with a
+   caret pointing back at it) — see media query below. */
 .notif-panel{
-  position:fixed; top:calc(var(--topbar-h, 60px) + var(--safe-t) + 10px);
+  position:fixed; top:calc(var(--topbar-h, 60px) + 10px);
   right:10px; left:auto; bottom:auto;
   width:360px; max-width:calc(100vw - 20px);
   background:var(--surface); border:1px solid var(--border); border-radius:16px;
@@ -850,11 +1513,42 @@ tbody tr:hover{background:var(--surface-alt);}
 
 /* ---------- 13. Breakpoints ---------- */
 
+/* Mobile header: keep the brand (logo+title) and the bell/balance/profile
+   cluster on one row instead of letting .who wrap onto a second line once
+   the two groups can't both fit at full size. The brand shrinks/truncates
+   first — the bell, balance pill and avatar all stay full size since
+   they're the actionable bits. Scoped to <900px only: at 900px+ the brand
+   moves into the sidebar and .topbar no longer needs this. */
+@media (max-width:899px){
+  .topbar{flex-wrap:nowrap;}
+  .who{flex-wrap:nowrap; flex-shrink:0;}
+  .brand{flex-shrink:1; min-width:0; overflow:hidden;}
+  .brand-text{min-width:0; overflow:hidden;}
+  .brand h1, .brand .sub{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+}
+
 /* Small phones (iPhone SE / small Android) */
 @media (max-width:359px){
   .balance-pill{padding:6px 10px; font-size:12.5px;}
   .btn{padding:10px 14px; font-size:0.8125rem;}
   .tab-btn{min-width:60px; font-size:9.5px;}
+}
+
+/* Narrow phones: even with the nowrap fix above, the brand text + bell +
+   balance pill + avatar can still be tight on ~360-400px screens. Trim
+   padding/gaps and drop the "Meal & expense tracker" subtitle so the row
+   has enough breathing room without ever wrapping. */
+@media (max-width:400px){
+  .topbar{padding:12px 10px; gap:6px;}
+  .brand{gap:8px;}
+  .brand .logo-dot{width:30px; height:30px;}
+  .brand h1{font-size:14.5px;}
+  .brand .sub{display:none;}
+  .who{gap:6px;}
+  .balance-pill{padding:6px 10px; font-size:12px;}
+  .notif-bell-btn{width:34px; height:34px; font-size:12.5px;}
+  .header-profile-btn{padding:4px 8px 4px 4px; gap:4px;}
+  .header-profile-avatar{width:24px; height:24px; font-size:10.5px;}
 }
 
 /* Tablet and up */
@@ -865,7 +1559,7 @@ tbody tr:hover{background:var(--surface-alt);}
   .summary-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
   .card{padding:20px;}
   .topbar{padding:14px 20px;}
-  .month-bar{margin:12px 20px 6px;}
+  .month-bar{padding:10px 20px;}
   .layout{padding:0 20px;}
 }
 
@@ -891,51 +1585,141 @@ tbody tr:hover{background:var(--surface-alt);}
     overflow:hidden;
   }
   .topbar{position:static; flex:0 0 auto; padding-left:0; padding-right:0;}
+  /* Branding now lives inside the sidebar card instead of the topbar on
+     desktop — the topbar keeps only the right-aligned notification/
+     balance/profile cluster. */
+  .topbar .brand{display:none;}
+  .header-greeting{display:flex; flex-direction:column; justify-content:center; gap:1px;}
+  .who{margin-left:0; width:auto;}
+  /* Full name + role become visible next to the avatar once there's room. */
+  .header-profile-info{display:flex;}
 
-  /* Month bar sits directly under the topbar in normal flow now (no sticky
-     offset needed — it's a real sibling, not overlaid on scrolling content).
-     Left margin stays 0 so it lines up with the sidebar's left edge.
-     Right margin matches content-wrap's own right padding below (22px here,
-     24px at the 1280px breakpoint) so the month-bar's right edge lines up
-     with the cards' right edge instead of sitting further out past them —
-     content-wrap's padding is extra inset that a plain 0/0 margin here
-     didn't account for.
-     margin-top brings back real breathing room above it so it reads as its
-     own card, not a line floating flush under the topbar's border. */
-  .month-bar{
+  /* The page-header-card is a sibling of .content-wrap inside .main-col
+     (see .main-col below) so it's naturally the same width as the content
+     column already — it just needs the same side margins content-wrap
+     uses for its own padding, so the card's left/right edges land exactly
+     on the dashboard cards' edges instead of spanning main-col's full
+     width. No longer sticky here: .content-wrap is what scrolls on
+     desktop, and the header card sits above it as a fixed sibling. */
+  .page-header-card{
     position:static;
-    flex:0 0 auto;
-    background:var(--surface);
-    margin:16px 22px 10px 0;
-    border-radius:var(--radius-sm);
+    margin:0 calc(22px + 9px) 14px 22px;
   }
+  .topbar{padding:13px 20px;}
+  .month-bar{padding:11px 20px;}
 
   /* align-items left at the flex default (stretch) so the sidebar and the
      content column both fill the full available height below the header,
      instead of the sidebar shrinking to fit its own nav items. */
   .layout{align-items:stretch; flex:1; min-height:0; overflow:hidden; padding:0;}
-  .tabs{
-    position:static;
-    flex-direction:column; gap:2px; width:240px; flex:0 0 240px;
-    background:var(--surface); border:1px solid var(--border); border-top:1px solid var(--border);
-    border-radius:var(--radius); padding:14px 10px; box-shadow:var(--shadow-sm);
-    overflow-x:visible; overflow-y:auto;
-    height:100%;
+
+  /* main-col becomes the height-constrained flex column: page-header-card
+     stays fixed-size, .content-wrap takes the remaining height and scrolls
+     independently — same "only content scrolls" behavior as before. */
+  .main-col{height:100%; min-height:0; overflow:hidden;}
+
+  /* Sidebar card: the single container that groups the logo/branding and
+     the nav menu together, per the redesign brief. It supplies all the
+     chrome (border/radius/shadow); .sidebar-brand and .tabs inside it are
+     just plain sections now. */
+  .sidebar-card{
+    display:flex; flex-direction:column;
+    width:240px; flex:0 0 240px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-sm);
+    overflow:hidden; height:100%; min-height:0;
   }
-  .tabs::before{
-    content:"MENU"; display:block;
-    font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--ink-faint);
-    padding:2px 10px 10px;
-  }
-  .tab-btn{
-    flex-direction:row; justify-content:flex-start; text-align:left; min-width:0; min-height:44px;
-    gap:11px; padding:10px 12px 10px 9px; font-size:0.84375rem; border-left:3px solid transparent; border-radius:var(--radius-sm);
+  .sidebar-brand{
+    display:flex; align-items:center; gap:10px;
+    padding:18px 16px 16px; border-bottom:1px solid var(--border);
     flex:0 0 auto;
   }
-  .tab-btn:hover{transform:translateX(2px); background:var(--surface-alt);}
-  .tab-btn.active{border-left-color:var(--primary); font-weight:700;}
-  .tab-btn.active i{transform:none;}
-  .tab-btn i{width:16px; text-align:center; font-size:14px;}
+  .sidebar-brand h1{font-size:15px;}
+
+  /* min-height:0 is the actual fix here: a flex item's automatic minimum
+     height defaults to its *content* size, not 0 — so even with flex:1
+     and a scrolling parent, .tabs was refusing to shrink below the height
+     of all its nav items combined, and quietly overflowed the sidebar by
+     that much even when the sidebar had plenty of visible room to spare.
+     That forced a scrollbar that shouldn't have been there. */
+  .tabs{
+    position:static;
+    flex-direction:column; align-items:stretch; gap:4px; width:auto; flex:1 1 auto; min-height:0;
+    background:transparent; border:none;
+    border-radius:0; padding:12px 10px; box-shadow:none;
+    overflow-x:visible; overflow-y:auto;
+    height:auto;
+  }
+  .tabs::before{content:none;}
+  /* Category headers — Main / Finance / Admin — group the menu instead of
+     one flat list. */
+  .tab-group-label{
+    display:block;
+    font-size:10px; font-weight:800; letter-spacing:.8px; text-transform:uppercase;
+    color:var(--ink-faint);
+    padding:14px 10px 6px;
+  }
+  .tab-group-label:first-child{padding-top:2px;}
+  /* Row height bumped from 36px to a more comfortable 44px, with matching
+     padding, so each item has real breathing room instead of feeling
+     cramped — a standard, professional touch-target size. Background/color
+     now transition smoothly instead of snapping on hover/active. */
+  .tab-btn{
+    position:relative;
+    flex-direction:row; align-items:center; justify-content:flex-start; text-align:left; min-width:0; min-height:44px;
+    width:100%;
+    gap:11px; padding:8px 13px; font-size:0.84375rem; font-weight:600; border-left:none; border-radius:var(--radius-sm);
+    flex:0 0 auto; color:var(--ink-soft);
+    transition:background var(--dur-base) var(--ease), color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .tab-btn:hover{background:var(--surface-alt); color:var(--ink);}
+  .tab-btn.active{
+    background:var(--meals-blue-bg); font-weight:700; color:var(--ink);
+    box-shadow:inset 0 0 0 1px rgba(46,93,232,.14);
+  }
+  .tab-btn i{font-size:13px;}
+  /* Left accent bar: a small rounded pill that grows in from the middle
+     of the row on the active tab, echoing the same "you are here" marker
+     used on the mobile bottom bar's dot. Makes the active row identifiable
+     from a glance down the sidebar, not just by its background tint. */
+  .tab-btn::before{
+    content:'';
+    position:absolute; left:-10px; top:50%;
+    width:3px; height:0; border-radius:0 3px 3px 0;
+    background:var(--meals-blue);
+    transform:translateY(-50%);
+    transition:height var(--dur-base) var(--ease);
+  }
+  .tab-btn.active::before{height:20px;}
+  /* Icon box: neutral tinted square by default, solid brand-blue with a
+     white icon only on the active row — the accent stays reserved for that
+     one highlight instead of being spread across every inactive row too,
+     which is what actually makes the active tab read as "selected" at a
+     glance instead of blending into a wall of color. Sized up slightly
+     (24px → 27px) to stay proportionate to the taller row. A soft colored
+     shadow underneath the active icon lifts it a touch off the row instead
+     of it sitting perfectly flat against the tinted background. */
+  .tab-icon-box{
+    width:27px; height:27px; border-radius:8px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--surface-alt); color:var(--ink-faint);
+    transition:background var(--dur-base) var(--ease), color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
+  }
+  .tab-btn.active .tab-icon-box{
+    background:var(--meals-blue); color:#fff;
+    box-shadow:0 4px 10px -3px rgba(46,93,232,.5);
+    transform:scale(1.04);
+  }
+  .tab-btn.active .tab-icon-box i{color:#fff;}
+  .tab-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;}
+  .tab-btn.active .tab-label{color:var(--meals-blue);}
+  /* No trailing chevron — these are flat routes, not expandable menus, so
+     a right-side arrow had no function and just made the row look
+     lopsided (a solid icon anchoring the left vs. a thin arrow floating
+     near the right edge). Equal 12px padding on both sides now, nothing
+     competing with it on the right. */
+  .tab-chevron{display:none;}
+  .tab-btn.active .tab-chevron{color:var(--meals-blue);}
 
   /* Settings is pushed to the bottom of the sidebar with flexible space
      above it, so the nav column reads as balanced instead of top-heavy
@@ -943,16 +1727,11 @@ tbody tr:hover{background:var(--surface-alt);}
   .tab-btn-pinned{margin-top:auto; border-top:1px solid var(--border); padding-top:14px;}
 
   .content-wrap{
-    /* Top padding is 0 on purpose: .tabs is a bordered box that sits flush
-       against the top of .layout, so the first card's own top edge needs to
-       start at that same y-position for the two boxes to line up. Any
-       top padding here pushes just the content column down and breaks that
-       alignment — it happened on every tab because every tab renders its
-       first element straight into this same padded box, not because any
-       one tab's markup was wrong. */
+    /* Top padding is 0 on purpose: the page-header-card above already
+       supplies its own bottom margin, so content-wrap's first card starts
+       right after it without doubling up the gap. */
     padding:0 22px 28px;
-    align-self:stretch; /* fill the row's height, unlike .tabs which stays content-sized */
-    height:100%;
+    flex:1 1 auto; min-height:0; /* fills the remaining height in .main-col's column, unlike the fixed-size header card above it */
     overflow-y:auto;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
@@ -960,14 +1739,13 @@ tbody tr:hover{background:var(--surface-alt);}
     /* Always reserve the scrollbar's own width, whether or not a scrollbar
        is actually needed right now — otherwise the cards' right edge shifts
        by ~9px (our scrollbar width) the moment content gets tall enough to
-       scroll, and month-bar (which has no scrollbar of its own) can't track
-       a moving target. */
+       scroll, and the header card (which has no scrollbar of its own)
+       can't track a moving target. */
     scrollbar-gutter:stable;
   }
-  /* Matches content-wrap's reserved scrollbar-gutter above, so month-bar's
-     right edge lines up with the cards' right edge even when there's no
-     scrollbar currently visible. */
-  .month-bar{margin-right:calc(22px + 9px);}
+  /* Matches content-wrap's reserved scrollbar-gutter above, so the
+     page-header-card's right edge lines up with the cards' right edge
+     even when there's no scrollbar currently visible — see .page-header-card. */
   .card{padding:22px 24px;}
   .card h2{font-size:15.5px;}
 }
@@ -975,9 +1753,166 @@ tbody tr:hover{background:var(--surface-alt);}
 @media (min-width:1280px){
   .card{padding:24px 28px;}
   .content-wrap{padding:0 24px 28px;}
-  .month-bar{margin-right:calc(24px + 9px);}
+  .page-header-card{margin-left:24px; margin-right:calc(24px + 9px);}
   #app{padding-left:2rem; padding-right:2rem;}
 }
+/* ---------- 15. Meals tab — header, date bar, avatars, total column, summary cards ----------
+   Purely additive/visual — no existing selector above is changed, and nothing here
+   alters app.js logic, Firestore writes, calculations, or permissions. */
+
+/* Card header: icon + title/subtitle on the left, action buttons on the right.
+   Reuses .card-header-row's bottom border/spacing; just restructures what's inside it. */
+.meals-header-row{display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px;}
+.meals-header-title{display:flex; align-items:flex-start; gap:12px; min-width:0;}
+.meals-header-icon{
+  flex-shrink:0; width:40px; height:40px; border-radius:50%;
+  background:var(--meals-blue-bg); color:var(--meals-blue);
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+}
+.meals-header-title h2{margin-bottom:2px;}
+.meals-header-title .small-note{margin-top:0;}
+.meals-header-actions{display:flex; gap:8px; flex-wrap:wrap;}
+.meals-header-actions .btn{margin-top:0;}
+.meals-header-actions .btn:not(.secondary){
+  background:var(--meals-blue); border-color:var(--meals-blue); box-shadow:0 2px 6px rgba(46,93,232,.25);
+}
+.meals-header-actions .btn:not(.secondary):hover{background:#2450C9; border-color:#2450C9;}
+
+/* Select Date row: label+input on the left, lock/time-left pill banner on the right */
+.meals-datebar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+.meals-datebar-field{display:flex; flex-direction:column; gap:6px; min-width:200px;}
+.meals-datebar-field label{margin:0; font-size:0.8125rem; font-weight:600; color:var(--ink-soft);}
+.meals-datebar-field input[type=date]{min-width:190px;}
+
+.meal-lock-pill{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  border:1px dashed var(--border); border-radius:var(--radius-sm);
+  padding:9px 14px; font-size:12.5px; color:var(--ink-soft); background:var(--surface);
+}
+.meal-lock-pill i{font-size:13px;}
+.meal-lock-pill.success{border-color:#9FD8BC; background:var(--success-bg); color:var(--success);}
+.meal-lock-pill.warning{border-color:#F3DFAF; background:var(--warning-bg); color:var(--warning);}
+.meal-lock-pill.danger{border-color:#F2C7C2; background:var(--danger-bg); color:var(--danger);}
+.meal-lock-pill .pill-badge{
+  font-weight:700; padding:2px 9px; border-radius:20px; background:rgba(255,255,255,.6);
+  border:1px solid currentColor;
+}
+.meal-lock-pill .pill-note{color:var(--ink-faint); font-weight:500;}
+
+/* Member avatar circle (initial letter, deterministic tint per member).
+   Palette kept entirely within the app's blue theme — 5 clearly distinct
+   blue hues (navy → indigo → steel → cyan-blue → sky) chosen with enough
+   hue/saturation spread apart that they read as different colors at a
+   glance, not just 5 near-identical pale greys. */
+.mrg-name-row{display:flex; align-items:center; gap:10px;}
+.member-avatar.av-0{background:#DCE6F7; color:#1E3A66; border-color:#B9CCE8;} /* navy */
+.member-avatar.av-1{background:#E3E8FE; color:#3450D6; border-color:#C3CCF7;} /* indigo */
+.member-avatar.av-2{background:#E1EDF5; color:#2B6693; border-color:#BEDAEA;} /* steel blue */
+.member-avatar.av-3{background:#DBF1FA; color:#0B7CAE; border-color:#AFE0F0;} /* cyan-blue */
+.member-avatar.av-4{background:#EAF3FC; color:#4A90D9; border-color:#C6E2F5;} /* sky blue */
+.mrg-name-info{display:flex; flex-direction:column; gap:3px; align-items:flex-start; min-width:0;}
+.mrg-name-line{display:flex; align-items:center; gap:6px; font-weight:600; color:var(--ink);}
+/* Meals tab specifically shows the "Member" role tag in blue (reference
+   image), not the app-wide green .badge.member used on the Members/
+   Dashboard tabs — scoped so nothing outside this row changes. */
+.mrg-name-info .badge.member{background:#EEF3FC; color:#5B7FB5;}
+
+/* Total column (member's lunch+dinner total for the selected date).
+   Mobile: sits top-right next to the name (see .meal-row-grid grid-area
+   above) as a small highlighted chip instead of plain stacked text, so it
+   reads as the one number worth noticing at a glance. */
+.mrg-total{display:flex; flex-direction:column; align-items:flex-end; gap:3px; text-align:right; padding-top:1px;}
+.mrg-total .meal-control-label{margin-bottom:0;}
+.mrg-total-value{
+  font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; line-height:1;
+  color:var(--meals-blue); background:var(--meals-blue-bg); border:1px solid #C7D4FA;
+  border-radius:20px; padding:5px 13px; min-width:34px; text-align:center;
+}
+@media (min-width:900px){
+  .mrg-total{align-items:center; text-align:center; padding-top:0;}
+  .mrg-total-value{font-size:17px; padding:4px 14px;}
+}
+
+/* Meal summary cards row (Total Lunch / Total Dinner / Total Meals today / Total Meals this month),
+   each with a small icon token — a decorated variant of .summary-box, same tokens/spacing. */
+.meal-summary-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px;}
+.meal-summary-card{
+  display:flex; align-items:center; gap:12px;
+  border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:14px 15px; min-width:0;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.meal-summary-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08);}
+.meal-summary-card:has(.icon-lunch){background:var(--meals-amber-bg); border-color:#F3DFAF;}
+.meal-summary-card:has(.icon-dinner){background:var(--meals-blue-bg); border-color:#C9D9F7;}
+.meal-summary-card:has(.icon-total){background:var(--success-bg); border-color:#C8ECD6;}
+.meal-summary-card:has(.icon-month){background:var(--meals-purple-bg); border-color:#DDD3FB;}
+.meal-summary-icon{
+  flex-shrink:0; width:38px; height:38px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:15px;
+  background:rgba(255,255,255,.65);
+}
+.meal-summary-icon.icon-lunch{color:var(--meals-amber);}
+.meal-summary-icon.icon-dinner{color:var(--meals-blue);}
+.meal-summary-icon.icon-total{color:var(--success);}
+.meal-summary-icon.icon-month{color:var(--meals-purple);}
+.meal-summary-card .label{font-size:0.6875rem; color:var(--ink-faint); font-weight:700; text-transform:uppercase; letter-spacing:.5px;}
+.meal-summary-card .value{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums; font-size:19px; font-weight:700; margin-top:3px; letter-spacing:-.02em;}
+@media (min-width:640px){
+  .meal-summary-grid{grid-template-columns:repeat(4,1fr);}
+}
+
+/* Lunch/Dinner Menu cards — read-only view of the Market Schedule's
+   marketItems shopping list for whoever's on duty that date/meal.
+   Side-by-side on desktop, stacked on mobile; kept deliberately compact
+   (smaller padding/icons/chips than a full .card) since these two sit
+   right under the date bar and shouldn't dominate the page. */
+.meal-menu-grid{display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:12px;}
+@media (min-width:640px){
+  .meal-menu-grid{grid-template-columns:1fr 1fr;}
+}
+.menu-card{margin-bottom:0; padding:14px 15px;}
+.menu-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.menu-card-title{display:flex; align-items:center; gap:9px; min-width:0;}
+.menu-card-title > div:last-child{font-size:13.5px;}
+.menu-card-icon{
+  flex-shrink:0; width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:12.5px;
+}
+.menu-card-icon.icon-lunch{background:var(--meals-amber-bg); color:var(--meals-amber);}
+.menu-card-icon.icon-dinner{background:var(--meals-blue-bg); color:var(--meals-blue);}
+.menu-card-duty{display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
+.menu-card-duty i{color:var(--meals-purple); font-size:10px;}
+.menu-card-head .badge{font-size:10px; padding:2px 8px;}
+.menu-items-row{display:flex; flex-wrap:wrap; align-items:center; gap:7px;}
+.menu-item-chip{
+  display:flex; align-items:center; gap:6px;
+  padding:6px 11px; border:1px solid var(--border); border-radius:20px;
+  background:var(--surface); font-size:12.5px; font-weight:600; color:var(--ink);
+}
+.menu-item-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.menu-item-dot.dot-0{background:var(--danger);}
+.menu-item-dot.dot-1{background:var(--meals-amber);}
+.menu-item-dot.dot-2{background:var(--success);}
+.menu-item-dot.dot-3{background:var(--meals-blue);}
+.menu-item-dot.dot-4{background:var(--meals-purple);}
+.menu-add-item-btn{
+  margin-top:0; padding:6px 12px; font-size:12.5px; font-weight:600; min-height:0; border-radius:20px;
+  border-style:dashed; border-color:#C9D9F7; color:var(--meals-blue); background:var(--meals-blue-bg);
+}
+.menu-add-item-btn:hover{background:#D6E2FA;}
+.meal-menu-note-row{margin-bottom:14px;}
+.meal-menu-note-row .small-note i{margin-right:5px;}
+
+/* Bottom explanatory note, boxed like the reference's info callout */
+.meal-info-box{
+  display:flex; align-items:flex-start; gap:10px;
+  background:var(--primary-bg); border:1px solid #C9DCE8; border-radius:var(--radius-sm);
+  padding:12px 14px; margin-top:14px;
+}
+.meal-info-box i{color:var(--primary); font-size:14px; margin-top:2px; flex-shrink:0;}
+.meal-info-box .small-note{margin:0; color:var(--primary-dark);}
+
 /* ---------- 14. Motion: entrances, accordion / tooltip / modal helpers ---------- */
 
 /* Page/tab transition: every render swaps #content's innerHTML wholesale,
@@ -1094,37 +2029,36 @@ details.accordion > .accordion-body{
    element up for the qty-input glow), no visual override here.
 --------------------------------------------------------------------- */
 
-/* --- Generic "pill" meal action buttons: +1 Both / Reset --- */
-.maa-both, .maa-reset{
-  position:relative; border-radius:11px; font-weight:700; letter-spacing:.1px;
-  box-shadow:0 2px 7px -2px rgba(28,39,51,.16), var(--shadow-sm);
-  transition:transform var(--dur-base) var(--ease), filter var(--dur-base) var(--ease),
-             box-shadow .4s var(--ease), background .4s var(--ease),
-             color .4s var(--ease), border-color .4s var(--ease);
+/* --- Generic "pill" meal action buttons: +1 Both / Reset ---
+   NOTE: these buttons also carry the generic ".btn.secondary" class in the
+   markup (`class="btn secondary mrg-inline-btn maa-both"`), and
+   ".btn.secondary" (two classes → specificity 0,2,0) was silently beating
+   these single-class ".maa-both"/".maa-reset" rules (0,1,0) at rest state —
+   the custom color never actually painted, only hover/active states peeked
+   through. Every selector below is now qualified with ".btn" so it matches
+   ".btn.secondary" on specificity and wins on source order instead.
+   Style matches the reference design: flat white pill, thin neutral
+   border, no fill tint — the two actions are told apart purely by text/
+   icon color (+1 Both → meals-blue, Reset → ink). */
+.btn.maa-both, .btn.maa-reset{
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; font-weight:700; letter-spacing:.1px; box-shadow:none;
+  transition:transform var(--dur-base) var(--ease), background .25s var(--ease),
+             border-color .25s var(--ease), color .25s var(--ease);
   overflow:hidden;
 }
-.maa-both{
-  background:linear-gradient(135deg, var(--primary-bg), #F3F8FB);
-  border:1px solid #C9DCE8; color:var(--primary-dark);
+.btn.maa-both{color:var(--meals-blue);}
+.btn.maa-both:hover:not(:disabled){
+  background:var(--meals-blue-bg); border-color:var(--meals-blue); transform:translateY(-1px);
 }
-.maa-both:hover:not(:disabled){
-  transform:translateY(-1.5px); filter:brightness(1.04);
-  box-shadow:0 6px 14px -3px rgba(51,96,127,.28), var(--shadow-sm);
-  background:linear-gradient(135deg, var(--primary-bg), #EAF2F7);
-}
-.maa-both:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
-.maa-both:disabled{background:var(--surface-alt); border-color:var(--border); color:var(--ink-faint); box-shadow:none;}
+.btn.maa-both:active:not(:disabled){transform:translateY(0) scale(.95);}
+.btn.maa-both:disabled{color:var(--ink-faint); background:var(--surface-alt); border-color:var(--border);}
 
-.maa-reset{
-  background:linear-gradient(135deg, var(--accent-bg), #FDF3EF);
-  border:1px solid #F2C7C2; color:var(--accent-dark);
+.btn.maa-reset{color:var(--ink);}
+.btn.maa-reset:hover:not(:disabled){
+  background:var(--surface-alt); border-color:#C7CDD4; transform:translateY(-1px);
 }
-.maa-reset:hover:not(:disabled){
-  transform:translateY(-1.5px); filter:brightness(1.04);
-  box-shadow:0 6px 14px -3px rgba(194,58,58,.22), var(--shadow-sm);
-  background:linear-gradient(135deg, var(--accent-bg), #FCE9E2);
-}
-.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95); filter:brightness(.98);}
+.btn.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95);}
 
 /* --- Centered confirmation popup with a blurred backdrop ---------------
    Deliberately NOT a child of the Meals tab's re-rendered markup. The tab
@@ -1197,4 +2131,106 @@ details.accordion > .accordion-body{
   border-color:var(--danger) !important;
   box-shadow:0 0 0 3px var(--danger-bg) !important;
   transition:border-color .4s var(--ease), box-shadow .4s var(--ease);
+}
+
+/* ---------------------------------------------------------------------
+   HISTORY TAB — redesign (icon stat cards w/ trend, icon section
+   headers, search/filter/export tools, styled empty states). Every
+   color used below is one of the existing design tokens above — no new
+   hex values introduced, just new components painted with them.
+--------------------------------------------------------------------- */
+.hist-header-row{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+.hist-header-row h2{font-size:17px; margin-bottom:4px;}
+.hist-header-row .hist-name{color:var(--meals-purple);}
+.hist-month-controls{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.hist-month-controls .btn{margin-top:0;}
+
+.hist-stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:2px;}
+@media (min-width:640px){.hist-stat-grid{grid-template-columns:repeat(4,1fr);}}
+.hist-stat-card{
+  border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface);
+  padding:14px 15px; min-width:0; transition:box-shadow .15s ease, border-color .15s ease;
+}
+.hist-stat-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08); border-color:#C9DCE8;}
+.hist-stat-icon{
+  width:34px; height:34px; border-radius:10px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:14px; margin-bottom:10px;
+}
+.hist-stat-card .label{font-size:0.6875rem; color:var(--ink-faint); font-weight:700; text-transform:uppercase; letter-spacing:.5px;}
+.hist-stat-card .value{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums; font-size:19px; font-weight:700; margin-top:4px; letter-spacing:-.02em; word-break:break-word;}
+.hist-stat-sub{font-size:11px; margin-top:7px; display:flex; align-items:center; flex-wrap:wrap; gap:4px;}
+.hist-trend{display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--ink-faint);}
+.hist-trend.trend-up{color:var(--success);}
+.hist-trend.trend-down{color:var(--danger);}
+.hist-trend i{font-size:9px;}
+
+.hist-section-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
+.hist-section-title{display:flex; align-items:center; gap:10px; min-width:0;}
+.hist-section-title h2{margin:0;}
+.hist-section-icon{
+  flex-shrink:0; width:32px; height:32px; border-radius:9px;
+  display:flex; align-items:center; justify-content:center; font-size:13px;
+}
+.hist-section-icon.icon-grocery{background:var(--meals-purple-bg); color:var(--meals-purple);}
+.hist-section-icon.icon-expense{background:var(--primary-bg); color:var(--primary);}
+.hist-section-icon.icon-wallet{background:var(--success-bg); color:var(--success);}
+.hist-section-tools{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.hist-search-wrap{position:relative;}
+.hist-search-wrap i{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--ink-faint); font-size:12px; pointer-events:none;}
+.hist-search-wrap input{padding-left:33px; min-height:38px; padding-top:8px; padding-bottom:8px; min-width:180px;}
+.hist-icon-btn{
+  display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; min-height:38px; margin-top:0;
+  padding:0; border-radius:var(--radius-sm); flex-shrink:0;
+}
+.hist-total-note{display:flex; align-items:center; gap:7px; color:var(--ink-soft); font-size:12px; margin-top:12px;}
+.hist-total-note i{color:var(--ink-faint); font-size:11px;}
+.hist-empty-box{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:34px 16px; text-align:center;}
+.hist-empty-box .hist-empty-icon{
+  width:52px; height:52px; border-radius:50%; background:var(--meals-purple-bg); color:var(--meals-purple);
+  display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:2px;
+}
+.hist-empty-box .hist-empty-title{font-weight:700; font-size:13.5px; color:var(--ink);}
+.hist-empty-box .hist-empty-sub{font-size:12px; color:var(--ink-faint); max-width:260px;}
+@media (max-width:639px){
+  .hist-section-tools{width:100%;}
+  .hist-search-wrap{flex:1 1 auto;}
+  .hist-search-wrap input{min-width:0; width:100%;}
+}
+
+/* Grocery Deductions & Shared Expense Deductions tables — mobile column
+   tightening. These two keep every column from the reference layout (no
+   columns dropped/merged), but the default .keep-native-tables padding
+   left enough empty space per cell that even short values (dates, small
+   amounts) forced horizontal scrolling on narrow phones. Tightening
+   padding/font/badge size here (History-only, via .hist-native-table so
+   Costs/Expenses/Deposits/Logs keep their own current spacing) lets the
+   same columns sit edge-to-edge instead of scrolling. !important is
+   needed only for the badge/button rules below because mealBadge()/
+   expenseMethodBadge() write their padding as inline style="" — normal
+   specificity can't beat that, only an !important external rule can. */
+@media (max-width:640px){
+  .hist-native-table th, .hist-native-table td{
+    padding:6px 7px !important;
+    font-size:11.5px !important;
+  }
+  .hist-native-table th{
+    font-size:9.5px !important;
+    letter-spacing:.3px !important;
+  }
+  .hist-native-table span[style*="border-radius:999px"]{
+    padding:2px 7px !important;
+    font-size:9.5px !important;
+  }
+  .hist-native-table .btn.secondary{
+    padding:4px 7px !important;
+    font-size:10.5px !important;
+    min-height:0 !important;
+  }
+}
+@media (max-width:400px){
+  .hist-native-table th, .hist-native-table td{
+    padding:5px 5px !important;
+    font-size:10.5px !important;
+  }
+  .hist-native-table th{font-size:8.5px !important;}
 }
