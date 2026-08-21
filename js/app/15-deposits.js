@@ -211,6 +211,10 @@ function attachDepositHandlers() {
   }
 }
 async function addDeposit() {
+  if (session.role !== 'admin' && session.role !== 'superadmin') {
+    showToast('You are not authorized to add deposits.', 'error');
+    return;
+  }
   const memberId = document.getElementById('dep-member').value;
   const date = document.getElementById('dep-date').value;
   const amountRaw = document.getElementById('dep-amount').value;
@@ -256,6 +260,10 @@ async function addDeposit() {
 // just sums state.deposits amounts) subtracts it automatically — no changes
 // needed anywhere else that reads deposits/balances.
 async function addWithdrawal() {
+  if (session.role !== 'admin' && session.role !== 'superadmin') {
+    showToast('You are not authorized to record withdrawals.', 'error');
+    return;
+  }
   const memberId = document.getElementById('wd-member').value;
   const date = document.getElementById('wd-date').value;
   const amountRaw = document.getElementById('wd-amount').value;
@@ -304,6 +312,10 @@ async function addWithdrawal() {
   persistDeposit(newId);
 }
 async function deleteDeposit(id) {
+  if (session.role !== 'superadmin') {
+    showToast('You are not authorized to delete deposit records.', 'error');
+    return;
+  }
   const rec = state.deposits.find(d => d.id === id);
   if (!rec) {
     showToast('This deposit record could not be found — it may have just been deleted.', 'error');

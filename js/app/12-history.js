@@ -235,6 +235,10 @@ function downloadHistoryExpenseCSV() {
 // Deposit or Withdraw Funds) for whoever's history is currently open —
 // the actual add-deposit/add-withdrawal forms live on that tab, not here.
 async function goHistoryAddDeposit(type) {
+  if (session.role !== 'admin' && session.role !== 'superadmin') {
+    showToast('You are not authorized to do this.', 'error');
+    return;
+  }
   await setTab('deposits');
   setTimeout(() => {
     const memberSel = document.getElementById(type === 'withdrawal' ? 'wd-member' : 'dep-member');
@@ -404,8 +408,10 @@ function renderHistory() {
           <h2>Deposits &amp; Withdrawals</h2>
         </div>
         <div class="hist-section-tools">
+          ${(session.role === 'admin' || session.role === 'superadmin') ? `
           <button type="button" class="btn secondary" style="margin-top:0; color:var(--success); border-color:#C8ECD6;" onclick="goHistoryAddDeposit('deposit')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Deposit</button>
           <button type="button" class="btn secondary" style="margin-top:0; color:var(--danger); border-color:#F2C7C2;" onclick="goHistoryAddDeposit('withdrawal')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Withdrawal</button>
+          ` : ''}
         </div>
       </div>
       <div class="table-responsive">${depositTable}</div>
