@@ -351,8 +351,8 @@ function renderDashboard() {
         <div class="summary-box"><div class="label">This Month's Expense</div><div class="value">${fmtMoney(myMonthlyExpense)}</div></div>
       </div>
       <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);">
-        <div class="small-note" style="margin:0;">Your personal meal rate — for reference only, not used in balance calculations.</div>
-        <div class="mono" style="font-size:22px; font-weight:700; margin-top:6px; cursor:help;" title="${myPersonalRate!==null ? myRateBreakdown : 'No meals recorded this month yet'}">${myPersonalRate!==null ? fmtMoney(myPersonalRate) : '—'} <span class="small-note" style="font-weight:400; font-size:13px;">/ meal</span></div>
+        <div class="small-note" style="margin:0; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Personal Meal Rate</div>
+        <div class="mono" style="font-size:22px; font-weight:700; margin-top:4px; cursor:help;" title="${myPersonalRate!==null ? myRateBreakdown : 'No meals recorded this month yet'}">${myPersonalRate!==null ? fmtMoney(myPersonalRate) : '—'} <span class="small-note" style="font-weight:400; font-size:13px;">/ meal</span></div>
       </div>
     </div>`;
   if (!dashboardExpenseDate) dashboardExpenseDate = todayStr();
@@ -402,7 +402,6 @@ function renderDashboard() {
           <span class="mono">${fmtMoney(dayCost.total)}</span>
         </div>
       </div>
-      <div class="small-note" style="margin-top:6px;">Everything logged in Costs + Expenses on ${dashboardExpenseDate}. This is raw money spent that day, not per-member meal charges.</div>
     </div>`;
   const schedList = membersWithSchedule();
   const todayDuty = schedList.filter(x => x.info && x.info.isToday);
@@ -416,7 +415,7 @@ function renderDashboard() {
         <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
       </div>
       ${todayDuty.filter(x=>x.member.marketItems).map(x=>`<div class="small-note" style="margin-top:4px;">🧺 <b>${x.member.name}</b>'s items: ${x.member.marketItems}</div>`).join('')}
-      <div class="small-note" style="margin-top:8px; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:7px 10px; color:#92400E; font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total). <span style="font-weight:400;">Numbers may still change if members update their meals later.</span></div>
+      <div class="small-note" style="margin-top:8px; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:7px 10px; color:#92400E; font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total).</div>
     </div>`;
   } else if (upcomingDuty.length) {
     // Show everyone whose duty falls on that same nearest date (e.g. one
@@ -443,7 +442,6 @@ function renderDashboard() {
   const personalReportCard = `
     <div class="card">
       <h2>📄 Person Based Daily Meal Rate</h2>
-      <div class="small-note" style="margin:0 0 10px;">Pick a day to download that day's meal rate report for everyone, or grab your own full-month report at once.</div>
       <div style="margin-bottom:10px;">
         <label style="font-size:12.5px;">Select day</label>
         <input type="date" id="personal-report-date" value="${todayStr()}">
@@ -493,8 +491,7 @@ function renderDashboard() {
       <div class="member-stat-list">${memberStatCardsHtml}</div>
     </div>
     <div class="card">
-      <h2>Mess Account Summary</h2>
-      <div class="small-note" style="margin:0 0 10px; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:7px 10px; color:#92400E; font-weight:600;">⚠️ These are ALL-TIME totals — everything since the mess started, added across all ${state.members.length} member(s) and every past month combined. This is NOT ${currentMonth}'s number — see the ${currentMonth} Summary card above for that.</div>
+      <h2>Mess Account Summary <span class="small-note" style="margin:0; display:inline-block; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--warning);">⚠️ All-Time</span></h2>
       <div class="summary-grid">
         <div class="summary-box"><div class="label">Total Grocery Cost (All-Time)</div><div class="value">${fmtMoney(allTimeTotalGroceryCost())}</div></div>
         <div class="summary-box"><div class="label">Total Shared Expenses (All-Time)</div><div class="value">${fmtMoney(allTimeTotalSharedExpense())}</div></div>
@@ -504,162 +501,614 @@ function renderDashboard() {
         <div class="summary-box"><div class="label">Cash in Hand (All-Time)</div><div class="value ${groupCash>=0?'pos':'neg'}">${fmtMoney(groupCash)}</div></div>
       </div>
     </div>
-    ${personalReportCard}
-    ${(session.role==='admin' || session.role==='superadmin') ? `
-    <div class="card">
-      <h2>Member Info</h2>
-      <div class="small-note" style="margin-bottom:10px;">Account creation date/time (Bangladesh time).</div>
-      <div class="table-responsive member-info-desktop-table">
-        <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Account Created</th></tr></thead>
-          <tbody>${state.members.map(m=>`<tr>
-            <td>${m.name}</td>
-            <td>${m.phone||'-'}</td>
-            <td>${roleBadgeHtml(m)}</td>
-            <td>${m.createdAt ? formatBDDateTime(m.createdAt) : '<span class="small-note" style="margin:0;">Unknown (before tracking)</span>'}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-      <div class="member-info-list">
-        ${state.members.map(m=>`
-        <div class="member-info-card">
-          <div class="member-info-row">
-            <span class="member-info-name"><b>Name:</b> ${m.name}</span>
-            ${roleBadgeHtml(m)}
-          </div>
-          <div class="member-info-row">
-            <span class="member-info-phone"><b>Phone:</b> ${m.phone||'-'}</span>
-            <span class="member-info-created"><b>Created:</b> ${m.createdAt ? formatBDDateTime(m.createdAt) : 'Unknown (before tracking)'}</span>
-          </div>
-        </div>`).join('')}
-      </div>
-    </div>` : ''}`;
+    ${personalReportCard}`;
 }
 
 /* ---------------- MARKET SCHEDULE ---------------- */
+// Which weekly-schedule row (if any) is currently expanded into its inline
+// edit form. Reset to null on every re-render triggered by an actual save,
+// so the form closes itself once the change is persisted.
+let _msched_editingId = null;
+
+function mschedInitials(name) {
+  return ((name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('') || '?').toUpperCase();
+}
+
 function renderSchedule() {
   const list = membersWithSchedule();
-  const todayDuty = list.filter(x => x.info && x.info.isToday);
+  const isSuperadmin = session.role === 'superadmin';
+  const shiftOrder = { lunch: 0, dinner: 1, both: 0 };
+  const todayDuty = list.filter(x => x.info && x.info.isToday)
+    .sort((a, b) => (shiftOrder[a.member.marketShift] ?? 2) - (shiftOrder[b.member.marketShift] ?? 2));
   const upcoming = list.filter(x => x.info && !x.info.isToday).sort((a, b) => a.info.daysLeft - b.info.daysLeft);
 
-  const todayCard = todayDuty.length ?
-    `<div class="card" style="background:var(--success-bg); border-color:#C8ECD6;">
-        <h2 style="color:var(--success);">🛒 On market duty today</h2>
-        ${todayDuty.map(x=>`<div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <div>
-            <b>${x.member.name}</b>
-            <span class="small-note" style="display:inline; margin-left:6px;">${shiftLabel(x.member.marketShift)}${x.member.phone?` · ${x.member.phone}`:''}</span>
-            ${x.member.marketItems ? `<div class="small-note" style="margin-top:3px;">🧺 Items: ${x.member.marketItems}</div>` : ''}
-          </div>
-          <span class="badge" style="background:${x.info.overdue?'var(--danger-bg)':'var(--success-bg)'}; color:${x.info.overdue?'var(--danger)':'var(--success)'}; border:1px solid ${x.info.overdue?'#F5C2C2':'#C8ECD6'};">${x.info.overdue ? `⚠ Overdue by ${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)} (deadline was ${formatHour12(x.info.deadlineHour)})` : `Today ✅ · ${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)} left (by ${formatHour12(x.info.deadlineHour)})`}</span>
-        </div>`).join('')}
-        <div class="small-note" style="margin-top:10px; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:7px 10px; color:#92400E; font-weight:600;">${(function(){const t=dayMealTotals(todayStr()); return `🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total).`;})()}</div>
-      </div>` :
-    `<div class="card"><div class="empty">No one is scheduled for market duty today.</div></div>`;
+  /* ---- Header ---- */
+  const header = `
+    <div class="msched-header">
+      <div>
+        <div class="msched-title">Market Schedule</div>
+        <div class="msched-subtitle">Plan and manage market duties &amp; shopping items</div>
+      </div>
+      <div class="msched-header-actions">
+        ${isSuperadmin ? `<button class="btn msched-assign-btn" onclick="openAssignDutyModal()"><i class="fas fa-plus"></i> Assign Market Duty</button>` : ''}
+        <button type="button" class="msched-filter-toggle-btn" title="Toggle filters" onclick="toggleScheduleToolbar()"><i class="fas fa-filter"></i></button>
+      </div>
+    </div>`;
 
-  // Everyone whose duty falls on that same nearest date (e.g. Lunch person
-  // and Dinner person on the same day) — not just whichever sorted first.
+  /* ---- On market duty today ---- */
+  const todayCard = todayDuty.length ? `
+    <div class="msched-banner is-today">
+      <div class="msched-banner-head"><span class="msched-banner-icon today"><i class="fas fa-cart-shopping"></i></span> On market duty today</div>
+      <div class="msched-duty-list">
+        ${todayDuty.map(x => {
+          const statusHtml = x.info.overdue ? `
+            <div class="msched-overdue-box">
+              <div class="l1"><i class="fas fa-triangle-exclamation"></i> Overdue by ${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)}</div>
+              <div class="l2">(deadline was ${formatHour12(x.info.deadlineHour)})</div>
+            </div>` : `
+            <div class="msched-status-wrap">
+              <span class="msched-status-pill today"><i class="fas fa-check"></i> Today</span>
+              <span class="msched-status-box">${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)} left (by ${formatHour12(x.info.deadlineHour)})</span>
+            </div>`;
+          const itemChips = (x.member.marketItems || '').split(',').map(s => s.trim()).filter(Boolean);
+          return `<div class="msched-duty-item">
+            <div class="msched-duty-item-top">
+              <div class="msched-duty-person">
+                <div class="member-avatar ${memberAvatarClass(x.member.id)}">${mschedInitials(x.member.name)}</div>
+                <div class="msched-duty-textcol">
+                  <div class="msched-duty-name">${x.member.name}</div>
+                  <div class="msched-duty-meta">${shiftLabel(x.member.marketShift)}${x.member.phone ? ` · <span class="msched-nowrap">${x.member.phone}</span>` : ''}</div>
+                </div>
+              </div>
+              ${statusHtml}
+            </div>
+            ${itemChips.length ? `<div class="msched-items-row"><span class="msched-items-label"><i class="fas fa-crown"></i> Items:</span>${itemChips.map(it => `<span class="msched-item-chip">${escapeHtml(it)}</span>`).join('')}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      ${(function() {
+        const t = dayMealTotals(todayStr());
+        return `<div class="msched-shop-strip">
+          <div class="msched-shop-strip-text"><i class="fas fa-basket-shopping"></i> Shop for today's meals — <b>${t.lunch}</b> Lunch, <b>${t.dinner}</b> Dinner (<b>${t.total}</b> total).</div>
+          <button class="btn secondary msched-cal-btn" onclick="setTab('meals')">View Details <i class="fas fa-arrow-right"></i></button>
+        </div>`;
+      })()}
+    </div>` : `
+    <div class="msched-banner is-empty">
+      <div class="msched-banner-head" style="color:var(--ink-soft);"><i class="fas fa-circle-info"></i> No one is scheduled for market duty today</div>
+    </div>`;
+
+  /* ---- Next market duty (everyone tied for the nearest upcoming date) ---- */
   const nearestDaysLeft = upcoming.length ? upcoming[0].info.daysLeft : null;
-  const nextGroup = upcoming.filter(x => x.info.daysLeft === nearestDaysLeft);
-  const nextCard = nextGroup.length ?
-    `<div class="card" style="background:var(--warning-bg); border-color:#FCE3B0;">
-        <h2>Next Market Duty</h2>
-        ${nextGroup.map(x=>`<div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <div>
-            <div style="font-size:19px; font-weight:700;">${x.member.name}</div>
-            <div class="small-note" style="margin-top:2px;">${WEEKDAYS[x.member.marketDay]} · ${shiftLabel(x.member.marketShift)} · ${fmtShortDate(x.info.date)}</div>
+  const nextGroup = upcoming.filter(x => x.info.daysLeft === nearestDaysLeft)
+    .sort((a, b) => (shiftOrder[a.member.marketShift] ?? 2) - (shiftOrder[b.member.marketShift] ?? 2));
+  const nextCard = nextGroup.length ? `
+    <div class="msched-banner is-next">
+      <div class="msched-banner-head"><span class="msched-banner-icon next"><i class="fas fa-calendar-day"></i></span> Next Market Duty</div>
+      <div class="msched-duty-list">
+        ${nextGroup.map(x => `<div class="msched-duty-item">
+          <div class="msched-duty-item-top">
+            <div class="msched-duty-person">
+              <div class="member-avatar ${memberAvatarClass(x.member.id)}">${mschedInitials(x.member.name)}</div>
+              <div class="msched-duty-textcol">
+                <div class="msched-duty-name">${x.member.name}</div>
+                <div class="msched-duty-meta">${WEEKDAYS[x.member.marketDay]} · ${shiftLabel(x.member.marketShift)} · <span class="msched-nowrap">${fmtShortDate(x.info.date)}</span></div>
+              </div>
+            </div>
           </div>
-          <span class="badge" style="background:#fff; color:var(--warning); border:1px solid #FCE3B0;">${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)} left</span>
+          ${(() => {
+            const nextItemChips = (x.member.marketItems || '').split(',').map(s => s.trim()).filter(Boolean);
+            return nextItemChips.length ? `<div class="msched-items-row"><span class="msched-items-label"><i class="fas fa-crown"></i> Items:</span>${nextItemChips.map(it => `<span class="msched-item-chip">${escapeHtml(it)}</span>`).join('')}</div>` : '';
+          })()}
+          <div class="msched-next-actions">
+            <span class="msched-status-box next"><i class="fas fa-hourglass-half"></i> ${formatCountdown(x.info.remDays, x.info.remHours, x.info.remMinutes)} left</span>
+            <button type="button" class="btn secondary msched-cal-btn" onclick="addScheduleDutyToCalendar('${x.member.id}')"><i class="fas fa-calendar-plus"></i> Add to calendar</button>
+          </div>
         </div>`).join('')}
-      </div>` :
-    '';
+      </div>
+    </div>` : '';
 
+  /* ---- Quick overview (aside) ---- */
+  const dayTotals = dayMealTotals(todayStr());
+  const overviewCard = `
+    <div class="card">
+      <div class="msched-card-title">Quick Overview</div>
+      <div class="msched-overview-list">
+        <div class="msched-overview-row"><div class="msched-overview-left"><span class="msched-overview-icon lunch"><i class="fas fa-utensils"></i></span> Lunch Meals</div><div class="msched-overview-value">${dayTotals.lunch}</div></div>
+        <div class="msched-overview-row"><div class="msched-overview-left"><span class="msched-overview-icon dinner"><i class="fas fa-bag-shopping"></i></span> Dinner Meals</div><div class="msched-overview-value">${dayTotals.dinner}</div></div>
+        <div class="msched-overview-row"><div class="msched-overview-left"><span class="msched-overview-icon total"><i class="fas fa-bowl-food"></i></span> Total Meals</div><div class="msched-overview-value">${dayTotals.total}</div></div>
+        <div class="msched-overview-row"><div class="msched-overview-left"><span class="msched-overview-icon members"><i class="fas fa-users"></i></span> Members on Duty</div><div class="msched-overview-value">${todayDuty.length}</div></div>
+      </div>
+    </div>`;
+
+  /* ---- Tips (aside, static guidance) ---- */
+  const tipsCard = `
+    <div class="card msched-tips-card">
+      <div class="msched-card-title"><i class="fas fa-lightbulb"></i> Market Duty Tips</div>
+      <ul class="msched-tips-list">
+        <li><i class="fas fa-circle-check"></i> Check meal count before heading out</li>
+        <li><i class="fas fa-circle-check"></i> Shop on time to avoid overdue duty</li>
+        <li><i class="fas fa-circle-check"></i> Keep receipts for grocery costs</li>
+      </ul>
+    </div>`;
+
+  /* ---- Weekly schedule toolbar (search / shift filter / export) ---- */
+  const toolbar = `
+    <div class="msched-toolbar" id="msched-toolbar-row">
+      <input type="text" class="search-input" id="msched-search-input" placeholder="Search member…" oninput="applyScheduleFilters()">
+      <select id="msched-shift-filter" onchange="applyScheduleFilters()">
+        <option value="all">All Shifts</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner">Dinner</option>
+        <option value="both">Both</option>
+      </select>
+      <button type="button" class="btn secondary msched-icon-btn" title="Download schedule as CSV" onclick="downloadScheduleCSV()"><i class="fas fa-download"></i></button>
+    </div>`;
+
+  /* ---- Weekly schedule rows: desktop table + mobile cards, same data ---- */
+  const rows = list.map(x => scheduleRowHtml(x, isSuperadmin)).join('');
+  const mobileCards = list.map(x => scheduleCardHtml(x, isSuperadmin)).join('');
+
+  /* ---- Bottom duty-statistics strip ---- */
+  const weekStats = computeScheduleWeekStats(list);
+  const statStrip = `
+    <div class="msched-stat-strip">
+      <div class="msched-stat-strip-item"><div class="msched-stat-strip-icon"><i class="fas fa-bowl-food"></i></div><div><div class="msched-stat-strip-value">${dayTotals.total}</div><div class="msched-stat-strip-label">Today's Meals · ${dayTotals.lunch}L / ${dayTotals.dinner}D</div></div></div>
+      <div class="msched-stat-strip-item"><div class="msched-stat-strip-icon"><i class="fas fa-calendar-week"></i></div><div><div class="msched-stat-strip-value">${weekStats.thisWeekDuties}</div><div class="msched-stat-strip-label">This Week Duties</div></div></div>
+      <div class="msched-stat-strip-item"><div class="msched-stat-strip-icon warn"><i class="fas fa-hourglass-half"></i></div><div><div class="msched-stat-strip-value">${weekStats.upcoming24h}</div><div class="msched-stat-strip-label">Upcoming in 24h</div></div></div>
+      <div class="msched-stat-strip-item"><div class="msched-stat-strip-icon success"><i class="fas fa-circle-check"></i></div><div><div class="msched-stat-strip-value">${weekStats.completedThisWeek}</div><div class="msched-stat-strip-label">Completed This Week</div></div></div>
+    </div>`;
+
+  return `
+    ${header}
+    <div class="msched-grid">
+      <div class="msched-slot-today">${todayCard}</div>
+      <div class="msched-slot-overview">${overviewCard}</div>
+      <div class="msched-slot-next">${nextCard}</div>
+      <div class="msched-slot-tips">${tipsCard}</div>
+      <div class="msched-full card">
+        <h2>Weekly Market Schedule</h2>
+        ${toolbar}
+        <div class="table-responsive msched-table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Phone</th><th>Market Day</th><th>Shift</th><th>Next Turn</th><th>Items to Buy</th>${isSuperadmin?'<th>Action</th>':''}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="msched-list">${mobileCards}</div>
+        ${statStrip}
+      </div>
+    </div>
+    <div class="msched-footnote"><i class="fas fa-circle-info"></i> Items help the market person know what to buy — keep the list updated so nothing is missed.${isSuperadmin ? ' Tap the pencil icon on any row to update their day, shift, or shopping list.' : ''}</div>`;
+}
+
+/* Shared day/shift/status/items markup for one member — desktop <tr>. */
+function scheduleRowHtml(x, isSuperadmin) {
+  const m = x.member,
+    info = x.info;
+  const searchKey = escapeHtml(`${m.name} ${m.phone || ''}`.toLowerCase());
+  const colspan = isSuperadmin ? 7 : 6;
+  if (_msched_editingId === m.id) {
+    return `<tr class="msched-filterable" data-search="${searchKey}" data-shift="${m.marketShift || ''}">
+      <td colspan="${colspan}">${scheduleEditFormHtml(m)}</td>
+    </tr>`;
+  }
+  let statusBadge;
+  if (!info) {
+    statusBadge = `<span class="small-note" style="margin:0;">Not set</span>`;
+  } else if (info.isToday) {
+    statusBadge = info.overdue ?
+      `<span class="msched-status-badge overdue"><i class="fas fa-triangle-exclamation"></i> ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} overdue</span>` :
+      `<span class="msched-status-badge ok"><i class="fas fa-check"></i> ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left</span>`;
+  } else {
+    statusBadge = `<span class="msched-status-badge upcoming"><i class="fas fa-hourglass-half"></i> ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left</span> <span class="small-note" style="margin:0;">— ${fmtShortDate(info.date)}</span>`;
+  }
+  return `<tr class="msched-filterable" data-search="${searchKey}" data-shift="${m.marketShift || ''}">
+    <td><div class="msched-table-name"><div class="member-avatar ${memberAvatarClass(m.id)}">${mschedInitials(m.name)}</div><span class="name-txt">${m.name}</span></div></td>
+    <td>${m.phone || '—'}</td>
+    <td>${hasMarketDay(m) ? WEEKDAYS[m.marketDay] : '—'}</td>
+    <td>${m.marketShift ? `<span class="badge" style="background:var(--primary-bg); color:var(--primary);">${shiftLabel(m.marketShift)}</span>` : '—'}</td>
+    <td>${statusBadge}${hasMarketDay(m) && m.marketShift ? ` <button type="button" class="msched-action-btn" title="Add this month's duty to calendar (2h reminder)" onclick="addMemberMonthlyDutyToCalendar('${m.id}')"><i class="fas fa-calendar-plus"></i></button>` : ''}</td>
+    <td>${m.marketItems ? `<span class="msched-duty-items" style="display:inline-flex;"><i class="fas fa-basket-shopping"></i> ${escapeHtml(m.marketItems)}</span>` : '<span class="small-note" style="margin:0;">—</span>'}</td>
+    ${isSuperadmin ? `<td><div class="msched-card-actions">
+        <button type="button" class="msched-action-btn" title="Edit" onclick="toggleScheduleEdit('${m.id}')"><i class="fas fa-pen"></i></button>
+        <button type="button" class="msched-action-btn danger" title="Remove from schedule" onclick="clearScheduleDuty('${m.id}')"><i class="fas fa-trash"></i></button>
+      </div></td>` : ''}
+  </tr>`;
+}
+
+/* Same member, mobile card markup (<900px). */
+function scheduleCardHtml(x, isSuperadmin) {
+  const m = x.member,
+    info = x.info;
+  const searchKey = escapeHtml(`${m.name} ${m.phone || ''}`.toLowerCase());
+  if (_msched_editingId === m.id) {
+    return `<div class="msched-card msched-filterable" data-search="${searchKey}" data-shift="${m.marketShift || ''}">${scheduleEditFormHtml(m)}</div>`;
+  }
+  let nextTurnHtml;
+  if (!info) {
+    nextTurnHtml = `<span>Not set</span>`;
+  } else if (info.isToday) {
+    nextTurnHtml = info.overdue ?
+      `<span style="color:var(--danger); font-weight:700;"><i class="fas fa-triangle-exclamation"></i> Overdue by ${formatCountdown(info.remDays, info.remHours, info.remMinutes)}</span>` :
+      `<span style="color:var(--success); font-weight:700;"><i class="fas fa-check"></i> Today · ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left</span>`;
+  } else {
+    nextTurnHtml = `<span>${fmtShortDate(info.date)} · ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left</span>`;
+  }
+  return `<div class="msched-card msched-filterable" data-search="${searchKey}" data-shift="${m.marketShift || ''}">
+    <div class="msched-card-top">
+      <div class="msched-card-person">
+        <div class="member-avatar ${memberAvatarClass(m.id)}">${mschedInitials(m.name)}</div>
+        <div style="min-width:0;">
+          <div class="msched-card-name">${m.name}</div>
+          <div class="msched-card-phone">${m.phone || '—'}</div>
+        </div>
+      </div>
+      ${isSuperadmin ? `<div class="msched-card-actions">
+          <button type="button" class="msched-action-btn" title="Edit" onclick="toggleScheduleEdit('${m.id}')"><i class="fas fa-pen"></i></button>
+          <button type="button" class="msched-action-btn danger" title="Remove" onclick="clearScheduleDuty('${m.id}')"><i class="fas fa-trash"></i></button>
+        </div>` : ''}
+    </div>
+    <div class="msched-card-meta">
+      <span><i class="fas fa-calendar-day"></i> ${hasMarketDay(m) ? WEEKDAYS[m.marketDay] : '—'}</span>
+      <span><i class="fas fa-clock"></i> ${shiftLabel(m.marketShift)}</span>
+    </div>
+    <div class="msched-card-next">${nextTurnHtml}</div>
+    ${hasMarketDay(m) && m.marketShift ? `<button type="button" class="btn secondary msched-cal-btn" style="margin-top:8px;" onclick="addMemberMonthlyDutyToCalendar('${m.id}')"><i class="fas fa-calendar-plus"></i> Add this month to calendar</button>` : ''}
+    ${m.marketItems ? `<div class="msched-card-items"><b>Items to buy</b>${escapeHtml(m.marketItems)}</div>` : ''}
+  </div>`;
+}
+
+/* Inline day/shift/items edit form shared by the desktop row and mobile card. */
+function scheduleEditFormHtml(m) {
+  return `<div class="msched-inline-edit">
+    <div class="msched-inline-edit-row">
+      <select id="se-day-${m.id}">
+        <option value="">— Day —</option>
+        ${WEEKDAYS.map((d, i) => `<option value="${i}" ${Number(m.marketDay)===i?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <select id="se-shift-${m.id}">
+        <option value="" ${!m.marketShift?'selected':''}>— Shift —</option>
+        <option value="lunch" ${m.marketShift==='lunch'?'selected':''}>Lunch</option>
+        <option value="dinner" ${m.marketShift==='dinner'?'selected':''}>Dinner</option>
+        <option value="both" ${m.marketShift==='both'?'selected':''}>Both</option>
+      </select>
+    </div>
+    <textarea id="se-items-${m.id}" class="msched-items-textarea" style="width:100%;" rows="2" placeholder="Items to buy — e.g. fish, potato, onion">${m.marketItems || ''}</textarea>
+    <div style="display:flex; gap:6px;">
+      <button type="button" class="btn msched-items-save" style="flex:1;" onclick="saveScheduleEdit('${m.id}')"><i class="fas fa-check"></i> Save</button>
+      <button type="button" class="btn secondary msched-items-save" style="flex:1;" onclick="toggleScheduleEdit('${m.id}')">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function toggleScheduleToolbar() {
+  const row = document.getElementById('msched-toolbar-row');
+  const btn = document.querySelector('.msched-filter-toggle-btn');
+  if (!row) return;
+  const nowHidden = row.classList.toggle('is-collapsed');
+  if (btn) btn.classList.toggle('is-active', !nowHidden);
+}
+
+// Client-side search + shift filter — toggles visibility only, so the
+// search box never loses focus on keystroke the way a full re-render would.
+function applyScheduleFilters() {
+  const searchEl = document.getElementById('msched-search-input');
+  const filterEl = document.getElementById('msched-shift-filter');
+  const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const shift = filterEl ? filterEl.value : 'all';
+  document.querySelectorAll('.msched-filterable').forEach(el => {
+    const matchesSearch = !q || (el.dataset.search || '').includes(q);
+    const matchesShift = shift === 'all' || el.dataset.shift === shift;
+    el.style.display = (matchesSearch && matchesShift) ? '' : 'none';
+  });
+}
+
+function toggleScheduleEdit(id) {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can edit the market schedule.', 'error');
+    return;
+  }
+  _msched_editingId = (_msched_editingId === id) ? null : id;
+  renderTabContent();
+}
+
+async function saveScheduleEdit(id) {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can edit the market schedule.', 'error');
+    renderTabContent();
+    return;
+  }
+  const m = memberById(id);
+  if (!m) return;
+  const dayEl = document.getElementById('se-day-' + id);
+  const shiftEl = document.getElementById('se-shift-' + id);
+  const itemsEl = document.getElementById('se-items-' + id);
+  const dayRaw = dayEl.value;
+  m.marketDay = dayRaw === '' ? null : Number(dayRaw);
+  m.marketShift = shiftEl.value;
+  m.marketItems = itemsEl.value.trim();
+  await persistMembers();
+  _msched_editingId = null;
+  renderTabContent();
+  showToast(`Market schedule updated for ${m.name}.`, 'success');
+}
+
+async function clearScheduleDuty(id) {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can edit the market schedule.', 'error');
+    return;
+  }
+  const m = memberById(id);
+  if (!m) return;
+  if (!confirm(`Remove ${m.name} from the market duty schedule? This won't remove them as a member.`)) return;
+  m.marketDay = null;
+  m.marketShift = '';
+  m.marketItems = '';
+  await persistMembers();
+  if (_msched_editingId === id) _msched_editingId = null;
+  renderTabContent();
+  showToast(`${m.name} removed from the market duty schedule.`, 'success');
+}
+
+/* ---- Assign Market Duty modal (superadmin only) — sets marketDay/
+   marketShift/marketItems on the existing member record in one save,
+   same fields the Members tab already edits, just from a quicker dialog. */
+function openAssignDutyModal() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can assign market duty.', 'error');
+    return;
+  }
+  let overlay = document.getElementById('msched-assign-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'msched-assign-overlay';
+    overlay.className = 'msched-modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div class="msched-modal" role="dialog" aria-modal="true" aria-labelledby="ad-title">
+      <h2 id="ad-title"><i class="fas fa-cart-shopping"></i> Assign Market Duty</h2>
+      <label for="ad-member">Member</label>
+      <select id="ad-member" onchange="prefillAssignDutyForm()">
+        ${state.members.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+      </select>
+      <label for="ad-day">Market Day</label>
+      <select id="ad-day">
+        <option value="">— Select day —</option>
+        ${WEEKDAYS.map((d, i) => `<option value="${i}">${d}</option>`).join('')}
+      </select>
+      <label for="ad-shift">Shift</label>
+      <select id="ad-shift">
+        <option value="">— Select shift —</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner">Dinner</option>
+        <option value="both">Both</option>
+      </select>
+      <label for="ad-items">Shopping Items (optional)</label>
+      <textarea id="ad-items" rows="2" placeholder="e.g. fish, potato, onion"></textarea>
+      <div class="msched-modal-actions">
+        <button type="button" class="btn secondary" onclick="closeAssignDutyModal()">Cancel</button>
+        <button type="button" class="btn" onclick="submitAssignDuty()"><i class="fas fa-check"></i> Save</button>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+  prefillAssignDutyForm();
+}
+
+function prefillAssignDutyForm() {
+  const id = document.getElementById('ad-member').value;
+  const m = memberById(id);
+  if (!m) return;
+  document.getElementById('ad-day').value = hasMarketDay(m) ? String(m.marketDay) : '';
+  document.getElementById('ad-shift').value = m.marketShift || '';
+  document.getElementById('ad-items').value = m.marketItems || '';
+}
+
+function closeAssignDutyModal() {
+  const overlay = document.getElementById('msched-assign-overlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.innerHTML = '';
+  }
+}
+
+async function submitAssignDuty() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can assign market duty.', 'error');
+    return;
+  }
+  const id = document.getElementById('ad-member').value;
+  const dayRaw = document.getElementById('ad-day').value;
+  const shift = document.getElementById('ad-shift').value;
+  const items = document.getElementById('ad-items').value.trim();
+  const m = memberById(id);
+  if (!m) return;
+  if (dayRaw === '' || !shift) {
+    showToast('Pick a market day and shift.', 'error');
+    return;
+  }
+  m.marketDay = Number(dayRaw);
+  m.marketShift = shift;
+  m.marketItems = items;
+  await persistMembers();
+  closeAssignDutyModal();
+  renderTabContent();
+  showToast(`Market duty assigned to ${m.name}.`, 'success');
+}
+
+/* ---- Duty statistics for the bottom strip ----
+   thisWeekDuties: total lunch/dinner duty-slots across the week (a "both"
+   shift counts as 2, matching how mealTypesForShift already treats it).
+   upcoming24h: assigned duties (today or the next occurrence) whose
+   shopping deadline falls within the next 24 hours and isn't overdue yet.
+   completedThisWeek: how many of this week's duty-slots already have a
+   confirmed marketCompletions entry for their date. */
+function computeScheduleWeekStats(list) {
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(now.getDate() - now.getDay());
+  let thisWeekDuties = 0,
+    completedThisWeek = 0,
+    upcoming24h = 0;
+  list.forEach(x => {
+    const m = x.member;
+    if (!hasMarketDay(m)) return;
+    const mealTypes = mealTypesForShift(m.marketShift);
+    thisWeekDuties += mealTypes.length;
+    const occDate = new Date(weekStart);
+    occDate.setDate(weekStart.getDate() + Number(m.marketDay));
+    const dateStr = `${occDate.getFullYear()}-${String(occDate.getMonth()+1).padStart(2,'0')}-${String(occDate.getDate()).padStart(2,'0')}`;
+    mealTypes.forEach(mt => {
+      const c = getMarketCompletion(m, dateStr, mt);
+      if (c && c.status === 'completed') completedThisWeek++;
+    });
+    if (x.info && !x.info.overdue) {
+      const msLeft = x.info.deadline - now;
+      if (msLeft >= 0 && msLeft <= 24 * 3600 * 1000) upcoming24h++;
+    }
+  });
+  return {
+    thisWeekDuties,
+    completedThisWeek,
+    upcoming24h
+  };
+}
+
+// Opens a prefilled Google Calendar "quick add" link for a member's next
+// upcoming market duty — reuses the same nextMarketInfo()/shiftLabel() data
+// already computed for the Next Market Duty card, no new state or writes.
+function addScheduleDutyToCalendar(memberId) {
+  const m = memberById(memberId);
+  if (!m) return;
+  const info = nextMarketInfo(m);
+  if (!info) {
+    showToast('No market day set for this member yet.', 'error');
+    return;
+  }
+  const start = new Date(info.date);
+  start.setHours(info.deadlineHour, 0, 0, 0);
+  const end = new Date(start.getTime() + 30 * 60000);
+  const fmt = (dt) => `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}T${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}00`;
+  const title = encodeURIComponent(`Market Duty — ${m.name} (${shiftLabel(m.marketShift)})`);
+  const details = encodeURIComponent(`Market shopping duty for ${shiftLabel(m.marketShift)}, deadline ${formatHour12(info.deadlineHour)}.${m.marketItems ? ' Items: ' + m.marketItems : ''}`);
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`;
+  window.open(url, '_blank', 'noopener');
+}
+
+// Escapes text for safe use inside .ics SUMMARY/DESCRIPTION fields per the
+// iCalendar spec — commas, semicolons, backslashes, and newlines all need
+// a backslash prefix (newlines become the literal two-char sequence \n).
+function icsEscape(text) {
+  return String(text)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+// Downloads a .ics file covering EVERY occurrence of a member's market duty
+// in the CURRENT calendar month (from today onward, so already-passed dates
+// this month are skipped) — one weekly-recurring VEVENT with an UNTIL at
+// month-end, plus a VALARM that fires 2 hours before each occurrence.
+// Works with any calendar app (Google/Apple/Outlook) via import, since
+// Google's own "quick add" URL scheme has no way to attach a reminder.
+function addMemberMonthlyDutyToCalendar(memberId) {
+  const m = memberById(memberId);
+  if (!m) return;
+  if (!hasMarketDay(m) || !m.marketShift) {
+    showToast('No market day set for this member yet.', 'error');
+    return;
+  }
+  const now = new Date();
+  const targetDay = Number(m.marketDay);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  monthEnd.setHours(23, 59, 59, 0);
+
+  // First occurrence on/after today (so past duty days this month aren't included).
+  const first = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = (targetDay - first.getDay() + 7) % 7;
+  first.setDate(first.getDate() + diff);
+
+  if (first > monthEnd) {
+    showToast(`${m.name} has no more market duty this month.`, 'error');
+    return;
+  }
+
+  const deadlineHour = marketDeadlineHourFor(m.marketShift);
+  const dtStart = new Date(first);
+  dtStart.setHours(deadlineHour, 0, 0, 0);
+  const dtEnd = new Date(dtStart.getTime() + 30 * 60000);
+
+  const fmtICS = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+  const untilStr = `${monthEnd.getFullYear()}${String(monthEnd.getMonth()+1).padStart(2,'0')}${String(monthEnd.getDate()).padStart(2,'0')}T235959`;
+  const stampNow = new Date();
+
+  const title = icsEscape(`Market Duty — ${m.name} (${shiftLabel(m.marketShift)})`);
+  const desc = icsEscape(`Market shopping duty for ${shiftLabel(m.marketShift)}, deadline ${formatHour12(deadlineHour)}.${m.marketItems ? ' Items: ' + m.marketItems.replace(/\r?\n/g, ', ') : ''}`);
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Market Schedule//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:market-duty-${m.id}-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}@marketschedule`,
+    `DTSTAMP:${fmtICS(stampNow)}Z`,
+    `DTSTART:${fmtICS(dtStart)}`,
+    `DTEND:${fmtICS(dtEnd)}`,
+    `RRULE:FREQ=WEEKLY;UNTIL=${untilStr}`,
+    `SUMMARY:${title}`,
+    `DESCRIPTION:${desc}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Market duty reminder',
+    'TRIGGER:-PT2H',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `market-duty-${m.name.replace(/\s+/g, '-').toLowerCase()}-${MONTHS_SHORT[now.getMonth()].toLowerCase()}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`This month's market duty for ${m.name} downloaded — open the file to add it to your calendar with a 2h reminder.`, 'success');
+}
+
+function downloadScheduleCSV() {
+  const list = membersWithSchedule();
+  const header = ['Name', 'Phone', 'Market Day', 'Shift', 'Next Turn', 'Items to Buy'];
   const rows = list.map(x => {
     const m = x.member,
       info = x.info;
-    let statusCell;
-    if (!info) {
-      statusCell = `<span class="small-note">Not set</span>`;
-    } else if (info.isToday) {
-      statusCell = info.overdue ?
-        `<span class="neg">Today — ⚠ overdue by ${formatCountdown(info.remDays, info.remHours, info.remMinutes)} (deadline was ${formatHour12(info.deadlineHour)})</span>` :
-        `<span class="pos">Today (${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left, by ${formatHour12(info.deadlineHour)})</span>`;
-    } else {
-      statusCell = `<span class="gold-text">${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left</span> — ${fmtShortDate(info.date)}`;
+    const day = hasMarketDay(m) ? WEEKDAYS[m.marketDay] : '';
+    let next = '';
+    if (info) {
+      next = info.isToday ?
+        (info.overdue ? `Overdue (deadline was ${formatHour12(info.deadlineHour)})` : `Today, by ${formatHour12(info.deadlineHour)}`) :
+        `${fmtShortDate(info.date)}`;
     }
-    const canEditItems = session.role === 'superadmin';
-    const itemsCell = canEditItems ?
-      `<textarea id="items-${m.id}" rows="2" style="width:170px; font-size:12.5px; padding:5px 7px; border:1px solid var(--border); border-radius:6px; font-family:inherit;" placeholder="e.g. fish, potato, onion">${m.marketItems||''}</textarea><br><button class="btn secondary" style="margin-top:4px; padding:3px 9px; font-size:11px;" onclick="saveMarketItems('${m.id}')">Save</button>` :
-      `<span class="small-note">${m.marketItems ? m.marketItems : '—'}</span>`;
-    return `<tr>
-      <td>${m.name}</td>
-      <td>${m.phone || '—'}</td>
-      <td>${hasMarketDay(m) ? WEEKDAYS[m.marketDay] : '—'}</td>
-      <td>${shiftLabel(m.marketShift)}</td>
-      <td>${statusCell}</td>
-      <td>${itemsCell}</td>
-    </tr>`;
-  }).join('');
-
-  // Same data as the table above, laid out as an ultra-compact card per
-  // member for phones: Name+Active on line 1, Phone on line 2, Day/Shift/
-  // Next-turn as one chip line, then the shopping list.
-  const mobileCards = list.map(x => {
-    const m = x.member,
-      info = x.info;
-    const active = isMemberActiveInMonth(m.id, currentMonth);
-    const dayChip = hasMarketDay(m) ? WEEKDAYS[m.marketDay].slice(0, 3) : '—';
-    const shiftIcon = m.marketShift === 'lunch' ? '☀️' : m.marketShift === 'dinner' ? '🌙' : m.marketShift === 'both' ? '🌗' : '';
-    let nextTurnText;
-    if (!info) {
-      nextTurnText = 'Not set';
-    } else if (info.isToday) {
-      nextTurnText = info.overdue ? `⚠ Overdue (${formatCountdown(info.remDays, info.remHours, info.remMinutes)})` : `Today (${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left)`;
-    } else {
-      nextTurnText = `${fmtShortDate(info.date)} (${formatCountdown(info.remDays, info.remHours, info.remMinutes)} left)`;
-    }
-    const canEditItems = session.role === 'superadmin';
-    const itemsBlock = canEditItems ?
-      `<div class="sched-label">Shopping List</div>
-         <textarea id="items-m-${m.id}" rows="2" class="sched-textarea" placeholder="e.g. fish, potato, onion">${m.marketItems||''}</textarea>
-         <button class="btn sched-save-btn" onclick="saveMarketItems('${m.id}', 'items-m-${m.id}')">Save</button>` :
-      (m.marketItems ? `<div class="sched-label">Shopping List</div><div class="sched-items-readonly">${m.marketItems}</div>` : '');
-    return `<div class="sched-card">
-      <div class="sched-row sched-row-top">
-        <span class="sched-name">${m.name}</span>
-        <span class="badge" style="${active ? 'background:var(--success-bg); color:var(--success);' : 'background:var(--danger-bg); color:var(--danger);'}">${active ? '🟢 Active' : 'Inactive'}</span>
-      </div>
-      <div class="sched-row sched-phone">📞 ${m.phone || '—'}</div>
-      <div class="sched-row sched-meta">🗓 ${dayChip} • ${shiftIcon} ${shiftLabel(m.marketShift)} • ⏳ ${nextTurnText}</div>
-      ${itemsBlock}
-    </div>`;
-  }).join('');
-
-  return `
-    ${todayCard}
-    ${nextCard}
-    <div class="card">
-      <h2>Weekly Market Schedule</h2>
-      <div class="table-responsive schedule-desktop-table">
-        <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Market Day</th><th>Shift</th><th>Next Turn</th><th>Items to Buy</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-      <div class="sched-list">${mobileCards}</div>
-    </div>`;
-}
-async function saveMarketItems(memberId, elId) {
-  if (session.role !== 'superadmin') {
-    showToast('Only super admin can edit the shopping list.', 'error');
-    return;
-  }
-  const ta = document.getElementById(elId || ('items-' + memberId));
-  if (!ta) return;
-  const m = memberById(memberId);
-  m.marketItems = ta.value.trim();
-  await persistMembers();
-  renderTabContent();
+    return [m.name, m.phone || '', day, shiftLabel(m.marketShift), next, (m.marketItems || '').replace(/\r?\n/g, ' ')];
+  });
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], {
+    type: 'text/csv;charset=utf-8;'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `market-schedule-${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ---------------- TIMESTAMPS & VISIBILITY ---------------- */

@@ -372,11 +372,17 @@ function renderMealMenuCard(mealType, dateStr) {
   const emptyMsg = !duty ?
     `No one is on ${mealType} duty for this date.` :
     'No items listed yet.';
+  const dutyLineHtml = duty ?
+    `<div class="menu-card-duty"><i class="fas fa-cart-shopping"></i> ${escapeHtml(duty.name)} is on ${mealType} duty</div>` :
+    '';
   return `<div class="card menu-card">
     <div class="menu-card-head">
       <div class="menu-card-title">
         <div class="menu-card-icon ${iconClass}"><i class="fas ${icon}"></i></div>
-        <div style="font-weight:700;">${label} <span class="small-note" style="margin:0;">(${dateStr})</span></div>
+        <div>
+          <div style="font-weight:700;">${label} <span class="small-note" style="margin:0;">(${dateStr})</span></div>
+          ${dutyLineHtml}
+        </div>
       </div>
       <span class="badge" style="background:var(--success-bg); color:var(--success);">${items.length} Item${items.length===1?'':'s'}</span>
     </div>

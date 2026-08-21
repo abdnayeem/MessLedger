@@ -2,25 +2,23 @@
 // 00-utils-core.js  (originally app.js lines 1-210)
 // Sticky header IIFE, core state vars, month/history vars, calc cache, memo(), toast/success-check UI helpers
 // ---------------------------------------------------------------------------
-// Keep the topbar's real height mirrored into --topbar-h so the month-bar
-// (and desktop sidebar tabs) can stick exactly below it, even if the topbar
-// wraps to a second line (long balance figure, role chip, etc). Runs
-// immediately — this script is loaded with `defer`, so the DOM already
-// exists by the time this executes.
+// Keep the topbar row's real bottom edge (measured from the viewport top)
+// mirrored into --topbar-h, so the mobile notification panel — which is
+// position:fixed and needs a real viewport-relative offset — can sit right
+// below it. Runs immediately — this script is loaded with `defer`, so the
+// DOM already exists by the time this executes.
 (function syncStickyHeaderVars() {
+  const headerCardEl = document.querySelector('.page-header-card');
   const topbarEl = document.querySelector('.topbar');
-  const monthBarEl = document.querySelector('.month-bar');
-  if (!topbarEl) return;
+  if (!headerCardEl || !topbarEl) return;
   const setVars = () => {
     const root = document.documentElement.style;
-    root.setProperty('--topbar-h', topbarEl.offsetHeight + 'px');
-    if (monthBarEl) root.setProperty('--month-bar-h', monthBarEl.offsetHeight + 'px');
+    root.setProperty('--topbar-h', topbarEl.getBoundingClientRect().bottom + 'px');
   };
   setVars();
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(setVars);
-    ro.observe(topbarEl);
-    if (monthBarEl) ro.observe(monthBarEl);
+    ro.observe(headerCardEl);
   } else {
     window.addEventListener('resize', setVars);
   }

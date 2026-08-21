@@ -114,6 +114,139 @@ function truncateCell(text, maxChars) {
 const COMPACT_ROW_STYLE = 'height:64px;';
 const COMPACT_CELL_STYLE = 'height:64px; vertical-align:middle;';
 
+/* ---------------- Grocery / Shared-expense search boxes ----------------
+   Same search-then-refocus pattern already used by costsSearch/expensesSearch/
+   depositsSearch elsewhere in the app — filters the table below it only,
+   the four stat cards up top stay scoped to the whole month/all-time regardless. */
+let historyGrocerySearch = '';
+let historyExpenseSearch = '';
+// Populated fresh on every renderHistory() call so the CSV export buttons can
+// read exactly what's currently on screen (post-search-filter) without
+// re-deriving it. Expense side reuses _histExpDetailsCache (00-utils-core.js),
+// which already holds this for the "View Details" buttons.
+let _histMealRowsCache = [];
+
+function setHistoryGrocerySearch(val) {
+  historyGrocerySearch = val;
+  renderTabContent();
+  const el = document.getElementById('history-grocery-search');
+  if (el) {
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+
+function setHistoryExpenseSearch(val) {
+  historyExpenseSearch = val;
+  renderTabContent();
+  const el = document.getElementById('history-expense-search');
+  if (el) {
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+
+// Small colored icon-card used for the four top stat tiles (Grocery Deductions /
+// Expense Deductions / Deposits / Withdrawn). `tone` picks which existing
+// design-token pair paints the icon (no new colors introduced). `trendHtml`
+// is only passed in month view — All Time has no "previous period" to compare against.
+const HISTORY_STAT_TONE = {
+  meal: {
+    bg: 'var(--meals-purple-bg)',
+    fg: 'var(--meals-purple)',
+    icon: 'fa-utensils'
+  },
+  expense: {
+    bg: 'var(--danger-bg)',
+    fg: 'var(--danger)',
+    icon: 'fa-file-invoice-dollar'
+  },
+  deposit: {
+    bg: 'var(--success-bg)',
+    fg: 'var(--success)',
+    icon: 'fa-circle-down'
+  },
+  withdraw: {
+    bg: 'var(--meals-amber-bg)',
+    fg: 'var(--meals-amber)',
+    icon: 'fa-circle-up'
+  }
+};
+
+function historyStatCard(tone, label, valueHtml, trendHtml) {
+  const t = HISTORY_STAT_TONE[tone];
+  return `
+    <div class="hist-stat-card">
+      <div class="hist-stat-icon" style="background:${t.bg}; color:${t.fg};"><i class="fas ${t.icon}"></i></div>
+      <div class="label">${label}</div>
+      <div class="value">${valueHtml}</div>
+      ${trendHtml ? `<div class="hist-stat-sub">${trendHtml}</div>` : ''}
+    </div>`;
+}
+
+// curr/prev are both already-positive magnitudes (deductions, deposits,
+// withdrawals are all summed as positive numbers before reaching here).
+function historyTrendHtml(curr, prev) {
+  if (curr === prev) return `<span class="hist-trend">0% <span class="small-note" style="margin:0;">vs last month</span></span>`;
+  if (prev === 0) return `<span class="hist-trend trend-up"><i class="fas fa-arrow-up"></i> New</span> <span class="small-note" style="margin:0;">vs last month</span>`;
+  const pct = ((curr - prev) / prev) * 100;
+  const up = pct > 0;
+  return `<span class="hist-trend ${up ? 'trend-up' : 'trend-down'}"><i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${Math.abs(pct).toFixed(1)}%</span> <span class="small-note" style="margin:0;">vs last month</span>`;
+}
+
+function _historyCsvExport(filename, header, rows) {
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v === undefined || v === null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], {
+    type: 'text/csv;charset=utf-8;'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadHistoryGroceryCSV() {
+  if (!_histMealRowsCache.length) {
+    showToast('No grocery deductions to export.', 'success');
+    return;
+  }
+  const header = ['Date', 'Meal Type', 'Qty', 'Rate', 'Deducted', 'Balance Before', 'Balance After', 'Recorded At'];
+  const rows = _histMealRowsCache.map(e => [e.date, MEAL_TYPE_LABEL[e.mealType], e.qty, e.rate, e.amount, e.balanceBefore, e.balanceAfter, formatBDDateTime(e.createdAt)]);
+  const selMember = memberById(historyMemberId);
+  _historyCsvExport(`grocery-deductions-${selMember ? selMember.name.replace(/\s+/g, '-').toLowerCase() : historyMemberId}-${historyViewMode === 'month' ? currentMonth : 'all-time'}.csv`, header, rows);
+}
+
+function downloadHistoryExpenseCSV() {
+  if (!_histExpDetailsCache.length) {
+    showToast('No shared-expense deductions to export.', 'success');
+    return;
+  }
+  const header = ['Date', 'Title', 'Amount', 'Method', 'Balance Before', 'Balance After'];
+  const rows = _histExpDetailsCache.map(e => [e.date, e.title, e.amount, expenseMethodLabel(e.splitType, e.mealTypeSplit, e.isEveryoneFallback), e.balanceBefore, e.balanceAfter]);
+  const selMember = memberById(historyMemberId);
+  _historyCsvExport(`shared-expense-deductions-${selMember ? selMember.name.replace(/\s+/g, '-').toLowerCase() : historyMemberId}-${historyViewMode === 'month' ? currentMonth : 'all-time'}.csv`, header, rows);
+}
+
+// Jumps to the Deposits tab and focuses/pre-fills the matching form (Add
+// Deposit or Withdraw Funds) for whoever's history is currently open —
+// the actual add-deposit/add-withdrawal forms live on that tab, not here.
+async function goHistoryAddDeposit(type) {
+  await setTab('deposits');
+  setTimeout(() => {
+    const memberSel = document.getElementById(type === 'withdrawal' ? 'wd-member' : 'dep-member');
+    if (memberSel && historyMemberId) {
+      memberSel.value = historyMemberId;
+      memberSel.dispatchEvent(new Event('change'));
+    }
+    const amountInput = document.getElementById(type === 'withdrawal' ? 'wd-amount' : 'dep-amount');
+    if (amountInput) amountInput.focus();
+  }, 60);
+}
+
 function renderHistory() {
   const canViewOthers = session.role === 'admin' || session.role === 'superadmin';
   const showTimeCol = shouldShowRecordedAt();
@@ -130,22 +263,32 @@ function renderHistory() {
   const mealRows = scopedLedger.filter(e => e.kind === 'meal').slice().reverse();
   const expenseRows = scopedLedger.filter(e => e.kind === 'expense').slice().reverse();
   const depositRows = scopedLedger.filter(e => e.kind === 'deposit').slice().reverse();
-  const mealTable = mealRows.length ? `
-    <table><thead><tr><th>Date</th><th>Meal Type</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Deducted</th><th class="num">Balance Before</th><th class="num">Balance After</th>${showTimeCol?'<th>Recorded At</th>':''}</tr></thead>
-    <tbody>${mealRows.map(e=>`<tr>
-      <td class="mono">${e.date}</td>
-      <td>${MEAL_TYPE_LABEL[e.mealType]}</td>
-      <td class="num">${e.qty}</td>
-      <td class="num">${fmtMoney(e.rate)}</td>
-      <td class="num neg">-${fmtMoney(e.amount)}</td>
-      <td class="num ${e.balanceBefore<0?'neg':'pos'}">${fmtMoney(e.balanceBefore)}</td>
-      <td class="num ${e.balanceAfter<0?'neg':'pos'}">${fmtMoney(e.balanceAfter)}</td>
-      ${showTimeCol?`<td class="small-note" style="margin:0;">${formatBDDateTime(e.createdAt)}</td>`:''}
-    </tr>`).join('')}</tbody></table>` : `<div class="empty">No meal deductions ${historyViewMode==='month'?'this month':'yet'}.</div>`;
+
+  // Search only narrows what's shown in that table — totals/trend cards
+  // above stay scoped to the whole month/all-time regardless of a search.
+  const gq = historyGrocerySearch.trim().toLowerCase();
+  const mealRowsShown = gq ? mealRows.filter(e => e.date.includes(gq) || (MEAL_TYPE_LABEL[e.mealType] || '').toLowerCase().includes(gq)) : mealRows;
+  const eq = historyExpenseSearch.trim().toLowerCase();
+  const expenseRowsShown = eq ? expenseRows.filter(e => e.date.includes(eq) || (e.title || '').toLowerCase().includes(eq) || expenseMethodLabel(e.splitType, e.mealTypeSplit, e.isEveryoneFallback).toLowerCase().includes(eq)) : expenseRows;
+
+  _histMealRowsCache = mealRowsShown;
+  const mealTable = mealRowsShown.length ? `
+    <table class="hist-native-table"><thead><tr><th>Date</th><th>Meal Type</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Deducted</th><th class="num">Balance Before</th><th class="num">Balance After</th>${showTimeCol?'<th>Recorded At</th>':''}</tr></thead>
+    <tbody>${mealRowsShown.map(e=>`<tr style="${COMPACT_ROW_STYLE}">
+      <td class="mono" style="${COMPACT_CELL_STYLE}">${e.date}</td>
+      <td style="${COMPACT_CELL_STYLE}">${mealBadge(e.mealType)}</td>
+      <td class="num" style="${COMPACT_CELL_STYLE}">${e.qty}</td>
+      <td class="num" style="${COMPACT_CELL_STYLE}">${fmtMoney(e.rate)}</td>
+      <td class="num neg" style="${COMPACT_CELL_STYLE}">-${fmtMoney(e.amount)}</td>
+      <td class="num ${e.balanceBefore<0?'neg':'pos'}" style="${COMPACT_CELL_STYLE}">${fmtMoney(e.balanceBefore)}</td>
+      <td class="num ${e.balanceAfter<0?'neg':'pos'}" style="${COMPACT_CELL_STYLE}">${fmtMoney(e.balanceAfter)}</td>
+      ${showTimeCol?`<td class="small-note" style="${COMPACT_CELL_STYLE} margin:0;">${formatBDDateTime(e.createdAt)}</td>`:''}
+    </tr>`).join('')}</tbody></table>` : `<div class="hist-empty-box"><div class="hist-empty-icon"><i class="fas fa-basket-shopping"></i></div><div class="hist-empty-title">${gq ? 'No matching records.' : `No meal deductions ${historyViewMode==='month'?'this month':'yet'}.`}</div></div>`;
+
   _histExpDetailsCache = [];
-  const expenseTable = expenseRows.length ? `
-    <table><thead><tr><th>Date</th><th>Title</th><th class="num">Amount</th><th>Method</th><th class="num">Balance</th>${showTimeCol?'<th>Recorded</th>':''}<th></th></tr></thead>
-    <tbody>${expenseRows.map((e,i)=>{
+  const expenseTable = expenseRowsShown.length ? `
+    <table class="hist-native-table"><thead><tr><th>Date</th><th>Title</th><th class="num">Amount</th><th>Method</th><th class="num">Balance</th>${showTimeCol?'<th>Recorded</th>':''}<th></th></tr></thead>
+    <tbody>${expenseRowsShown.map((e,i)=>{
       _histExpDetailsCache[i] = e;
       return `<tr style="${COMPACT_ROW_STYLE}">
       <td class="mono" style="${COMPACT_CELL_STYLE}">${e.date}</td>
@@ -156,7 +299,8 @@ function renderHistory() {
       ${showTimeCol?`<td class="small-note" style="${COMPACT_CELL_STYLE} margin:0;">${formatBDDate(e.createdAt)}</td>`:''}
       <td style="${COMPACT_CELL_STYLE}"><button class="btn secondary" style="margin:0; padding:5px 10px; font-size:12px;" onclick="showHistoryExpenseDetail(${i})">View Details</button></td>
     </tr>`;
-    }).join('')}</tbody></table>` : `<div class="empty">🧾 No shared-expense deductions ${historyViewMode==='month'?'this month yet':'yet'}.</div>`;
+    }).join('')}</tbody></table>` : `<div class="hist-empty-box"><div class="hist-empty-icon" style="background:var(--primary-bg); color:var(--primary);"><i class="fas fa-receipt"></i></div><div class="hist-empty-title">${eq ? 'No matching records.' : `No shared-expense deductions ${historyViewMode==='month'?'this month yet':'yet'}.`}</div></div>`;
+
   const depositTable = depositRows.length ? `
     <table><thead><tr><th>Date</th><th>Type</th><th>Note</th><th class="num">Amount</th><th class="num">Balance Before</th><th class="num">Balance After</th>${showTimeCol?'<th>Recorded At</th>':''}</tr></thead>
     <tbody>${depositRows.map(d=>`<tr>
@@ -167,43 +311,103 @@ function renderHistory() {
       <td class="num ${d.balanceBefore<0?'neg':'pos'}">${fmtMoney(d.balanceBefore)}</td>
       <td class="num ${d.balanceAfter<0?'neg':'pos'}">${fmtMoney(d.balanceAfter)}</td>
       ${showTimeCol?`<td class="small-note" style="margin:0;">${formatBDDateTime(d.createdAt)}</td>`:''}
-    </tr>`).join('')}</tbody></table>` : `<div class="empty">No deposits or withdrawals ${historyViewMode==='month'?'this month':'yet'}.</div>`;
+    </tr>`).join('')}</tbody></table>` : `
+    <div class="hist-empty-box">
+      <div class="hist-empty-icon" style="background:var(--success-bg); color:var(--success);"><i class="fas fa-wallet"></i></div>
+      <div class="hist-empty-title">No deposits or withdrawals ${historyViewMode==='month'?'this month':'yet'}.</div>
+      <div class="hist-empty-sub">All your deposit and withdrawal transactions will appear here.</div>
+    </div>`;
+
   const selMember = memberById(historyMemberId);
   const scopeLabel = historyViewMode === 'month' ? currentMonth : 'all time';
   const mealTotal = mealRows.reduce((s, e) => s + e.amount, 0);
   const expenseTotal = expenseRows.reduce((s, e) => s + e.amount, 0);
   const depositTotal = depositRows.filter(d => d.amount > 0).reduce((s, d) => s + d.amount, 0);
   const withdrawalTotal = depositRows.filter(d => d.amount < 0).reduce((s, d) => s + Math.abs(d.amount), 0);
+
+  // Trend vs. previous month — only meaningful in month view (All Time has
+  // no single "previous period" to compare against, so the cards drop the
+  // sub-line entirely in that mode).
+  let trendMeal = '', trendExpense = '', trendDeposit = '', trendWithdraw = '';
+  if (historyViewMode === 'month') {
+    const prevMonth = shiftMonthStr(currentMonth, -1);
+    const prevLedger = ledger.filter(e => e.date.startsWith(prevMonth));
+    const prevMealTotal = prevLedger.filter(e => e.kind === 'meal').reduce((s, e) => s + e.amount, 0);
+    const prevExpenseTotal = prevLedger.filter(e => e.kind === 'expense').reduce((s, e) => s + e.amount, 0);
+    const prevDepositTotal = prevLedger.filter(e => e.kind === 'deposit' && e.amount > 0).reduce((s, e) => s + e.amount, 0);
+    const prevWithdrawalTotal = prevLedger.filter(e => e.kind === 'deposit' && e.amount < 0).reduce((s, e) => s + Math.abs(e.amount), 0);
+    trendMeal = historyTrendHtml(mealTotal, prevMealTotal);
+    trendExpense = historyTrendHtml(expenseTotal, prevExpenseTotal);
+    trendDeposit = historyTrendHtml(depositTotal, prevDepositTotal);
+    trendWithdraw = historyTrendHtml(withdrawalTotal, prevWithdrawalTotal);
+  }
+
+  const mealRecordNote = gq ? `${mealRowsShown.length} of ${mealRows.length} records` : `Total Records: ${mealRows.length}`;
+  const expenseRecordNote = eq ? `${expenseRowsShown.length} of ${expenseRows.length} records` : `Total Records: ${expenseRows.length}`;
+
   return `
     <div class="card">
-      <div class="row-between">
-        <h2>History — ${selMember?selMember.name:''}</h2>
+      <div class="hist-header-row">
         <div>
+          <h2>History — <span class="hist-name">${selMember?escapeHtml(selMember.name):''}</span></h2>
+          <div class="small-note" style="margin-bottom:0;">Every meal and shared-expense deduction for ${scopeLabel}, most recent first.${showTimeCol ? ' Exact recording time (Bangladesh time) is shown below.' : ''}</div>
+        </div>
+        <div class="hist-month-controls">
           <button class="btn secondary" style="margin-top:0; padding:6px 11px;" onclick="navigateMonth(-1, setHistoryView)" title="Previous month">‹</button>
-          <button class="btn secondary ${historyViewMode==='month'?'active-toggle':''}" style="margin-top:0;" onclick="setHistoryView('month')">${currentMonth}</button>
+          <button class="btn secondary ${historyViewMode==='month'?'active-toggle':''}" style="margin-top:0;" onclick="setHistoryView('month')"><i class="fas fa-calendar" style="margin-right:6px;"></i>${currentMonth}</button>
           <button class="btn secondary" style="margin-top:0; padding:6px 11px;" onclick="navigateMonth(1, setHistoryView)" title="Next month">›</button>
-          <button class="btn secondary ${historyViewMode==='all'?'active-toggle':''}" style="margin-top:0;" onclick="setHistoryView('all')">All Time</button>
+          <button class="btn secondary ${historyViewMode==='all'?'active-toggle':''}" style="margin-top:0;" onclick="setHistoryView('all')"><i class="fas fa-clock-rotate-left" style="margin-right:6px;"></i>All Time</button>
         </div>
       </div>
-      <div class="small-note" style="margin-bottom:12px;">Every meal and shared-expense deduction for ${scopeLabel}, most recent first.${showTimeCol ? ' Exact recording time (Bangladesh time) is shown below.' : ''}</div>
       ${selectBox}
-      <div class="summary-grid">
-        <div class="summary-box"><div class="label">Meal Deductions</div><div class="value neg">${fmtMoney(mealTotal)}</div></div>
-        <div class="summary-box"><div class="label">Expense Deductions</div><div class="value neg">${fmtMoney(expenseTotal)}</div></div>
-        <div class="summary-box"><div class="label">Deposits</div><div class="value pos">${fmtMoney(depositTotal)}</div></div>
-        <div class="summary-box"><div class="label">Withdrawn</div><div class="value ${withdrawalTotal>0?'neg':''}">${fmtMoney(withdrawalTotal)}</div></div>
+      <div class="hist-stat-grid">
+        ${historyStatCard('meal', 'Grocery Deductions', `<span class="neg">${fmtMoney(mealTotal)}</span>`, trendMeal)}
+        ${historyStatCard('expense', 'Expense Deductions', `<span class="neg">${fmtMoney(expenseTotal)}</span>`, trendExpense)}
+        ${historyStatCard('deposit', 'Deposits', `<span class="pos">${fmtMoney(depositTotal)}</span>`, trendDeposit)}
+        ${historyStatCard('withdraw', 'Withdrawn', `<span class="${withdrawalTotal>0?'neg':''}">${fmtMoney(withdrawalTotal)}</span>`, trendWithdraw)}
       </div>
     </div>
     <div class="card keep-native-tables">
-      <h2>Grocery Deductions</h2>
+      <div class="hist-section-head">
+        <div class="hist-section-title">
+          <div class="hist-section-icon icon-grocery"><i class="fas fa-basket-shopping"></i></div>
+          <h2>Grocery Deductions</h2>
+        </div>
+        <div class="hist-section-tools">
+          <div class="hist-search-wrap"><i class="fas fa-search"></i><input type="text" id="history-grocery-search" class="search-input" style="width:auto;" placeholder="Search by meal type..." value="${historyGrocerySearch.replace(/"/g,'&quot;')}" oninput="setHistoryGrocerySearch(this.value)"></div>
+          <button type="button" class="btn secondary hist-icon-btn" title="Search filters the list below" onclick="document.getElementById('history-grocery-search').focus()"><i class="fas fa-filter"></i></button>
+          <button type="button" class="btn secondary hist-icon-btn" title="Download as CSV" onclick="downloadHistoryGroceryCSV()"><i class="fas fa-download"></i></button>
+        </div>
+      </div>
       <div class="table-responsive">${mealTable}</div>
+      <div class="hist-total-note"><i class="fas fa-file-lines"></i>${mealRecordNote}</div>
     </div>
     <div class="card keep-native-tables">
-      <h2>Shared Expense Deductions</h2>
+      <div class="hist-section-head">
+        <div class="hist-section-title">
+          <div class="hist-section-icon icon-expense"><i class="fas fa-users"></i></div>
+          <h2>Shared Expense Deductions</h2>
+        </div>
+        <div class="hist-section-tools">
+          <div class="hist-search-wrap"><i class="fas fa-search"></i><input type="text" id="history-expense-search" class="search-input" style="width:auto;" placeholder="Search by title..." value="${historyExpenseSearch.replace(/"/g,'&quot;')}" oninput="setHistoryExpenseSearch(this.value)"></div>
+          <button type="button" class="btn secondary hist-icon-btn" title="Search filters the list below" onclick="document.getElementById('history-expense-search').focus()"><i class="fas fa-filter"></i></button>
+          <button type="button" class="btn secondary hist-icon-btn" title="Download as CSV" onclick="downloadHistoryExpenseCSV()"><i class="fas fa-download"></i></button>
+        </div>
+      </div>
       <div class="table-responsive">${expenseTable}</div>
+      <div class="hist-total-note"><i class="fas fa-file-lines"></i>${expenseRecordNote}</div>
     </div>
     <div class="card keep-native-tables">
-      <h2>Deposits &amp; Withdrawals</h2>
+      <div class="hist-section-head">
+        <div class="hist-section-title">
+          <div class="hist-section-icon icon-wallet"><i class="fas fa-wallet"></i></div>
+          <h2>Deposits &amp; Withdrawals</h2>
+        </div>
+        <div class="hist-section-tools">
+          <button type="button" class="btn secondary" style="margin-top:0; color:var(--success); border-color:#C8ECD6;" onclick="goHistoryAddDeposit('deposit')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Deposit</button>
+          <button type="button" class="btn secondary" style="margin-top:0; color:var(--danger); border-color:#F2C7C2;" onclick="goHistoryAddDeposit('withdrawal')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Withdrawal</button>
+        </div>
+      </div>
       <div class="table-responsive">${depositTable}</div>
     </div>`;
 }
