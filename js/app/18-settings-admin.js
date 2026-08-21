@@ -378,6 +378,10 @@ function updateAdminMonthAccessYearAllMonths(module, year, checked) {
 }
 
 async function saveSettings() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can do this.', 'error');
+    return;
+  }
   const mealLockTimeParts = document.getElementById('set-mealLockTime').value.split(':').map(Number);
   const mealLockHour = mealLockTimeParts[0];
   const mealLockMinute = mealLockTimeParts[1] || 0;
@@ -422,6 +426,10 @@ async function saveSettings() {
   renderTabContent();
 }
 async function resetSettings() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can do this.', 'error');
+    return;
+  }
   if (!confirm('Reset all settings to their defaults?')) return;
   await snapshotMembersAndSettings('Before resetting settings to defaults');
   state.settings = defaultSettings();
