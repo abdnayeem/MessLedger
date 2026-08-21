@@ -847,6 +847,10 @@ function computeExpenseSplit(mode, date, amount, selectedMemberIds, mealTypeSpli
 
 function attachExpenseHandlers() {}
 async function addExpense() {
+  if (session.role !== 'admin' && session.role !== 'superadmin') {
+    showToast('You are not authorized to add expense records.', 'error');
+    return;
+  }
   const date = document.getElementById('exp-date').value;
   const amount = Number(document.getElementById('exp-amount').value);
   const title = document.getElementById('exp-title').value.trim();
@@ -1145,6 +1149,10 @@ async function saveExpenseEdit(id) {
 }
 
 async function deleteExpense(id) {
+  if (session.role !== 'superadmin') {
+    showToast('You are not authorized to delete expense records.', 'error');
+    return;
+  }
   const rec = state.expenses.find(e => e.id === id);
   if (!rec) {
     showToast('This expense record could not be found — it may have just been deleted.', 'error');

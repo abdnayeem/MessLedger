@@ -581,6 +581,10 @@ function setCostsView(mode) {
 
 function attachCostHandlers() {}
 async function addCost() {
+  if (session.role !== 'admin' && session.role !== 'superadmin') {
+    showToast('You are not authorized to add cost records.', 'error');
+    return;
+  }
   const date = document.getElementById('cost-date').value;
   const mealType = document.getElementById('cost-mealtype').value;
   const amount = Number(document.getElementById('cost-amount').value);
@@ -733,6 +737,10 @@ async function saveCostEdit(id) {
   persistCost(id);
 }
 async function deleteCost(id) {
+  if (session.role !== 'superadmin') {
+    showToast('You are not authorized to delete cost records.', 'error');
+    return;
+  }
   const rec = state.costs.find(c => c.id === id);
   if (!rec) {
     showToast('This cost record could not be found — it may have just been deleted.', 'error');

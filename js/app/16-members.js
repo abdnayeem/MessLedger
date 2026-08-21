@@ -183,6 +183,10 @@ function attachMemberHandlers() {
   });
 }
 async function addMember() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can add members.', 'error');
+    return;
+  }
   const name = document.getElementById('new-member-name').value.trim();
   if (!name) {
     showToast('Full name is required.', 'error');
