@@ -446,9 +446,10 @@ function renderDashboard() {
         <label style="font-size:12.5px;">Select day</label>
         <input type="date" id="personal-report-date" value="${todayStr()}">
       </div>
-      <div style="display:flex; gap:10px; flex-wrap:nowrap;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-download-highlight" style="flex:1; min-width:0;" onclick="downloadDailyMealRateReport()"><span class="dl-icon">⬇️</span> <span class="dl-label">Day Report (Everyone)</span></button>
         <button class="btn btn-download-highlight" style="flex:1; min-width:0;" onclick="downloadPersonalMonthReport()"><span class="dl-icon">⬇️</span> <span class="dl-label">${currentMonth} (Mine)</span></button>
+        <button class="btn btn-download-highlight" style="flex:1; min-width:0;" onclick="downloadFullMonthAllMembersReport()"><span class="dl-icon">⬇️</span> <span class="dl-label">${currentMonth} (Everyone)</span></button>
       </div>
     </div>`;
 

@@ -468,6 +468,254 @@ function buildPersonalMonthReportHtml(month) {
   return reportShell(body, `MessLedger — ${month}`);
 }
 
+/* ---------------- FULL MONTH REPORT — EVERYONE (Dashboard) ----------------
+   Companion to the day report and the "mine only" month report: this one
+   dumps the *entire* month for the *whole mess* in one printable page —
+   per-member summary (meals/grocery/shared/deposits/balance/rate, same
+   numbers as the Dashboard's monthly table) plus the raw grocery-cost,
+   shared-expense, and deposit/withdrawal logs for the month, so it can be
+   downloaded and archived or shared with the group. */
+function buildFullMonthAllMembersReportHtml(month) {
+  const groceryRate = monthMealRate(month);
+  const monthGrocery = state.costs.filter(c => c.date.startsWith(month)).reduce((s, c) => s + Number(c.amount || 0), 0);
+  const monthShared = monthTotalExpense(month);
+  const monthDep = monthTotalDeposits(month);
+  const monthWithdraw = monthTotalWithdrawals(month);
+  const priorBalance = state.members.reduce((s, m) => s + openingBalance(m.id, month), 0);
+  const combinedCost = monthGrocery + monthShared;
+  const cashInHand = priorBalance + monthDep - monthWithdraw - combinedCost;
+  const moneyTag = (v) => v >= 0 ? `<span style="color:#16A34A;">${fmtMoney(v)}</span>` : `<span style="color:#DC2626;">-${fmtMoney(Math.abs(v))}</span>`;
+
+  // ---- Lunch/Dinner split per member for the month (from raw day records) ----
+  const monthDateKeys = Object.keys(state.days).filter(k => k.startsWith(month)).sort();
+  const memberLunchDinner = {};
+  monthDateKeys.forEach(d => {
+    const meals = (state.days[d] && state.days[d].meals) || {};
+    Object.keys(meals).forEach(mid => {
+      if (!memberLunchDinner[mid]) memberLunchDinner[mid] = { lunch: 0, dinner: 0 };
+      memberLunchDinner[mid].lunch += meals[mid].lunch || 0;
+      memberLunchDinner[mid].dinner += meals[mid].dinner || 0;
+    });
+  });
+
+  // ---- Per-member monthly summary (mirrors Dashboard's month table, plus lunch/dinner split & highlight badges) ----
+  const memberRows = state.members.map(m => {
+    const ld = memberLunchDinner[m.id] || { lunch: 0, dinner: 0 };
+    const meals = ld.lunch + ld.dinner;
+    const cost = monthMemberMealCost(m.id, month);
+    const dep = monthDeposit(m.id, month);
+    const expShare = monthExpenseShare(m.id, month);
+    const totalExpense = cost + expShare;
+    const opening = openingBalance(m.id, month);
+    const balance = opening + dep - totalExpense;
+    const personalRate = meals > 0 ? totalExpense / meals : null;
+    const inactive = !isMemberActiveInMonth(m.id, month);
+    return { member: m, lunch: ld.lunch, dinner: ld.dinner, meals, cost, dep, expShare, totalExpense, opening, balance, personalRate, inactive };
+  });
+  const totalMeals = memberRows.reduce((s, r) => s + r.meals, 0);
+  const totalLunchAll = memberRows.reduce((s, r) => s + r.lunch, 0);
+  const totalDinnerAll = memberRows.reduce((s, r) => s + r.dinner, 0);
+  const monthAvgRate = totalMeals > 0 ? combinedCost / totalMeals : null;
+  const spendMax = memberRows.length ? Math.max(...memberRows.map(r => r.totalExpense)) : 0;
+  const mealsMax = memberRows.length ? Math.max(...memberRows.map(r => r.meals)) : 0;
+  const memberRowsHtml = memberRows.length ? memberRows.map((r, i) => {
+    let badge = '';
+    if (r.totalExpense > 0 && r.totalExpense === spendMax) badge = '💸 Top Spender';
+    else if (r.meals > 0 && r.meals === mealsMax) badge = '🍽️ Most Meals';
+    else if (r.personalRate !== null && monthAvgRate !== null && r.personalRate < monthAvgRate) badge = '🌱 Budget Friendly';
+    return `
+    <tr style="${i%2? 'background:#F8F9FA;':''}">
+      <td style="padding:7px 8px;">${reportAvatarNameCell(r.member.name)}${r.inactive ? ' <span style="font-size:9px; color:#9CA3AF;">(inactive)</span>' : ''}</td>
+      <td style="text-align:center; padding:7px 8px;">${r.lunch}</td>
+      <td style="text-align:center; padding:7px 8px;">${r.dinner}</td>
+      <td style="text-align:center; padding:7px 8px;">${r.meals}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(r.cost)}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(r.expShare)}</td>
+      <td style="text-align:right; padding:7px 8px; font-weight:700;">${fmtMoney(r.totalExpense)}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(r.dep)}</td>
+      <td style="text-align:right; padding:7px 8px;">${moneyTag(r.opening)}</td>
+      <td style="text-align:right; padding:7px 8px; font-weight:700;">${moneyTag(r.balance)}</td>
+      <td style="text-align:right; padding:7px 8px;">${r.personalRate!==null?fmtMoney(r.personalRate):'—'}</td>
+      <td style="padding:7px 8px; font-size:9.5px;">${badge}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="12" style="padding:10px 8px; color:#6B7280;">No members found.</td></tr>`;
+
+  // ---- Mess-wide day-by-day breakdown for the month ----
+  const dailyDateSet = new Set([
+    ...monthDateKeys,
+    ...state.costs.filter(c => c.date.startsWith(month)).map(c => c.date),
+    ...state.expenses.filter(e => e.date.startsWith(month)).map(e => e.date)
+  ]);
+  const dailyDates = Array.from(dailyDateSet).sort();
+  const dailyRows = dailyDates.map(d => {
+    const mt = dayMealTotals(d);
+    const dc = dayTotalCost(d);
+    return { date: d, lunch: mt.lunch, dinner: mt.dinner, meals: mt.total, grocery: dc.grocery, shared: dc.shared, total: dc.total };
+  });
+  const nonZeroDaily = dailyRows.filter(d => d.total > 0);
+  const priciestDay = nonZeroDaily.length ? nonZeroDaily.reduce((a, b) => b.total > a.total ? b : a) : null;
+  const lightestDay = nonZeroDaily.length ? nonZeroDaily.reduce((a, b) => b.total < a.total ? b : a) : null;
+  const dailyRowsHtml = dailyRows.length ? dailyRows.map((d, i) => {
+    let tag = '';
+    if (priciestDay && d.date === priciestDay.date && nonZeroDaily.length > 1) tag = '<div style="font-size:9px; color:#D97706; margin-top:2px;">🔥 Priciest day</div>';
+    else if (lightestDay && d.date === lightestDay.date && nonZeroDaily.length > 1) tag = '<div style="font-size:9px; color:#16A34A; margin-top:2px;">🌱 Lightest day</div>';
+    return `<tr style="${i%2? 'background:#F8F9FA;':''}">
+      <td style="padding:7px 8px;">${d.date}${tag}</td>
+      <td style="text-align:center; padding:7px 8px;">${d.lunch}</td>
+      <td style="text-align:center; padding:7px 8px;">${d.dinner}</td>
+      <td style="text-align:center; padding:7px 8px;">${d.meals}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(d.grocery)}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(d.shared)}</td>
+      <td style="text-align:right; padding:7px 8px; font-weight:600;">${fmtMoney(d.total)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" style="padding:10px 8px; color:#6B7280;">No activity recorded this month.</td></tr>`;
+
+  // ---- Raw grocery-cost log for the month ----
+  const costEntries = state.costs.filter(c => c.date.startsWith(month)).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const costRowsHtml = costEntries.length ? costEntries.map((c, i) => `
+    <tr style="${i%2? 'background:#F8F9FA;':''}">
+      <td style="padding:7px 8px;">${c.date}</td>
+      <td style="padding:7px 8px;">${MEAL_TIME_LABEL[c.mealType || 'other'] || c.mealType || '—'}</td>
+      <td style="padding:7px 8px;">${c.note || '—'}</td>
+      <td style="padding:7px 8px;">${(memberById(c.purchasedBy)||{}).name || c.addedBy || '—'}</td>
+      <td style="padding:7px 8px; font-size:9px; color:#6B7280;">${c.addedBy || '—'}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(Number(c.amount||0))}</td>
+    </tr>`).join('') : `<tr><td colspan="6" style="padding:10px 8px; color:#6B7280;">No grocery costs logged this month.</td></tr>`;
+
+  // ---- Raw shared-expense log for the month, with full per-member split detail ----
+  const expenseEntries = state.expenses.filter(e => e.date.startsWith(month)).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const expenseRowsHtml = expenseEntries.length ? expenseEntries.map((e, i) => {
+    const splitLabel = e.memberIds.length === state.members.length ? 'Everyone' : `${e.memberIds.length} member(s)`;
+    const isMealSplit = !!e.shares;
+    const splitDetail = e.memberIds.map(mid => {
+      const mm = memberById(mid);
+      const share = expenseShareFor(e, mid);
+      return `${mm?mm.name:'?'}: ${fmtMoney(share)}`;
+    }).join(', ');
+    return `<tr style="${i%2? 'background:#F8F9FA;':''}">
+      <td style="padding:7px 8px;">${e.date}</td>
+      <td style="padding:7px 8px;">${e.title}${e.description ? `<div style="font-size:9px; color:#6B7280;">${e.description}</div>` : ''}</td>
+      <td style="padding:7px 8px;">${splitLabel}${isMealSplit ? ' <span style="font-size:9px; color:#6B7280;">(by meal count)</span>' : ''}<div style="font-size:9px; color:#6B7280; margin-top:2px;">${splitDetail}</div></td>
+      <td style="padding:7px 8px;">${e.addedBy || '—'}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(Number(e.amount||0))}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" style="padding:10px 8px; color:#6B7280;">No shared expenses logged this month.</td></tr>`;
+
+  // ---- Raw deposit / withdrawal log for the month ----
+  const depositEntries = state.deposits.filter(d => d.date.startsWith(month)).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const depositRowsHtml = depositEntries.length ? depositEntries.map((d, i) => `
+    <tr style="${i%2? 'background:#F8F9FA;':''}">
+      <td style="padding:7px 8px;">${d.date}</td>
+      <td style="padding:7px 8px;">${(memberById(d.memberId)||{}).name || '—'}</td>
+      <td style="padding:7px 8px;">${d.type === 'withdrawal' ? '🔻 Withdrawal' : '💰 Deposit'}</td>
+      <td style="padding:7px 8px;">${d.note || '—'}</td>
+      <td style="padding:7px 8px; font-size:9px; color:#6B7280;">${d.addedBy || '—'}</td>
+      <td style="text-align:right; padding:7px 8px;">${fmtMoney(Number(d.amount||0))}</td>
+    </tr>`).join('') : `<tr><td colspan="6" style="padding:10px 8px; color:#6B7280;">No deposits or withdrawals logged this month.</td></tr>`;
+
+  const statStrip = `<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+      ${reportStatBox('🛒 MONTHLY GROCERY RATE', `${fmtMoney(groceryRate)}/meal`, '#EEF2FF', '#C7D2FE')}
+      ${reportStatBox('🍽️ TOTAL MEALS', `${totalMeals} (${totalLunchAll}L / ${totalDinnerAll}D)`, '#E7F6EC', '#BBE5C8')}
+      ${reportStatBox('💵 TOTAL COST', fmtMoney(combinedCost), '#FEF3C7', '#F59E0B')}
+      ${reportStatBox('👥 ACTIVE MEMBERS', activeMemberIdsForMonth(month).length, '#F3E8FF', '#DDD6FE')}
+    </div>`;
+
+  const body = `
+    ${messLedgerReportHeader('Meal &amp; expense tracker — Full Month Report (Everyone)')}
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px; flex-wrap:wrap; gap:6px;">
+      <div style="font-size:18px; font-weight:700;">${month}</div>
+      <div style="font-size:11.5px; color:#6B7280;">Generated ${formatBDDateTime(nowTimestamp())}</div>
+    </div>
+    ${statStrip}
+    ${reportSectionTitle('📋 Month Summary')}
+    ${reportSummaryGrid([
+      ['Total Grocery Cost', fmtMoney(monthGrocery), 'Total Shared Expenses', fmtMoney(monthShared)],
+      ['Total Cost (Grocery + Shared)', fmtMoney(combinedCost), 'Total Deposit', fmtMoney(monthDep)],
+      ['Total Withdrawal', fmtMoney(monthWithdraw), 'Prior Balance (carried in)', (priorBalance>=0?'':'-')+fmtMoney(Math.abs(priorBalance))],
+      ['Cash in Hand (end of month)', (cashInHand>=0?'':'-')+fmtMoney(Math.abs(cashInHand)), 'Grocery Cost Entries', String(costEntries.length)],
+      ['Shared Expense Entries', String(expenseEntries.length), 'Deposit/Withdrawal Entries', String(depositEntries.length)],
+    ])}
+    ${monthAvgRate!==null ? reportRateCallout('Month Average Meal Rate', `Total Cost ÷ Total Meals = ${fmtMoney(combinedCost)} ÷ ${totalMeals}`, `${fmtMoney(monthAvgRate)} / meal`, null) : ''}
+    ${reportSectionTitle('👥 Per-Member Summary')}
+    <table style="font-size:10px;">
+      <thead><tr style="background:${REPORT_HEADER_BG}; color:#fff;">
+        <th style="text-align:left; padding:7px 8px;">Member</th><th style="padding:7px 8px;">Lunch</th><th style="padding:7px 8px;">Dinner</th>
+        <th style="padding:7px 8px;">Meals</th>
+        <th style="text-align:right; padding:7px 8px;">Grocery Cost</th><th style="text-align:right; padding:7px 8px;">Shared Exp.</th>
+        <th style="text-align:right; padding:7px 8px;">Total Exp.</th><th style="text-align:right; padding:7px 8px;">Deposits</th>
+        <th style="text-align:right; padding:7px 8px;">Prior Bal.</th><th style="text-align:right; padding:7px 8px;">Balance</th>
+        <th style="text-align:right; padding:7px 8px;">Rate</th><th style="text-align:left; padding:7px 8px;">Highlight</th></tr></thead>
+      <tbody>${memberRowsHtml}
+      <tr style="background:#EDF1F4; font-weight:700;">
+        <td style="padding:7px 8px;">Total</td>
+        <td style="text-align:center; padding:7px 8px;">${totalLunchAll}</td>
+        <td style="text-align:center; padding:7px 8px;">${totalDinnerAll}</td>
+        <td style="text-align:center; padding:7px 8px;">${totalMeals}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthGrocery)}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthShared)}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(combinedCost)}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthDep)}</td>
+        <td colspan="4" style="text-align:right; padding:7px 8px;">—</td>
+      </tr></tbody>
+    </table>
+    ${reportSectionTitle('📅 Day-by-Day Breakdown (Whole Mess)')}
+    <table style="font-size:10.5px; margin-bottom:12px;">
+      <thead><tr style="background:${REPORT_HEADER_BG}; color:#fff;">
+        <th style="text-align:left; padding:7px 8px;">Date</th><th style="padding:7px 8px;">Lunch</th><th style="padding:7px 8px;">Dinner</th>
+        <th style="padding:7px 8px;">Meals</th><th style="text-align:right; padding:7px 8px;">Grocery</th>
+        <th style="text-align:right; padding:7px 8px;">Shared</th><th style="text-align:right; padding:7px 8px;">Total</th></tr></thead>
+      <tbody>${dailyRowsHtml}
+      <tr style="background:#EDF1F4; font-weight:700;">
+        <td style="padding:7px 8px;">Total</td>
+        <td style="text-align:center; padding:7px 8px;">${totalLunchAll}</td>
+        <td style="text-align:center; padding:7px 8px;">${totalDinnerAll}</td>
+        <td style="text-align:center; padding:7px 8px;">${totalMeals}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthGrocery)}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthShared)}</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(combinedCost)}</td>
+      </tr></tbody>
+    </table>
+    ${reportSectionTitle('🛒 Grocery Cost Log')}
+    <table style="font-size:10.5px; margin-bottom:12px;">
+      <thead><tr style="background:${REPORT_HEADER_BG}; color:#fff;">
+        <th style="text-align:left; padding:7px 8px;">Date</th><th style="text-align:left; padding:7px 8px;">Meal</th>
+        <th style="text-align:left; padding:7px 8px;">Note</th><th style="text-align:left; padding:7px 8px;">Purchased By</th>
+        <th style="text-align:left; padding:7px 8px;">Logged By</th>
+        <th style="text-align:right; padding:7px 8px;">Amount</th></tr></thead>
+      <tbody>${costRowsHtml}
+      <tr style="background:#EDF1F4; font-weight:700;"><td colspan="5" style="padding:7px 8px;">Total</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthGrocery)}</td></tr></tbody>
+    </table>
+    ${reportSectionTitle('🧾 Shared Expense Log (with split detail)')}
+    <table style="font-size:10.5px; margin-bottom:12px;">
+      <thead><tr style="background:${REPORT_HEADER_BG}; color:#fff;">
+        <th style="text-align:left; padding:7px 8px;">Date</th><th style="text-align:left; padding:7px 8px;">Title</th>
+        <th style="text-align:left; padding:7px 8px;">Split (who owes what)</th><th style="text-align:left; padding:7px 8px;">Added By</th>
+        <th style="text-align:right; padding:7px 8px;">Amount</th></tr></thead>
+      <tbody>${expenseRowsHtml}
+      <tr style="background:#EDF1F4; font-weight:700;"><td colspan="4" style="padding:7px 8px;">Total</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthShared)}</td></tr></tbody>
+    </table>
+    ${reportSectionTitle('💰 Deposit / Withdrawal Log')}
+    <table style="font-size:10.5px;">
+      <thead><tr style="background:${REPORT_HEADER_BG}; color:#fff;">
+        <th style="text-align:left; padding:7px 8px;">Date</th><th style="text-align:left; padding:7px 8px;">Member</th>
+        <th style="text-align:left; padding:7px 8px;">Type</th><th style="text-align:left; padding:7px 8px;">Note</th>
+        <th style="text-align:left; padding:7px 8px;">Added By</th>
+        <th style="text-align:right; padding:7px 8px;">Amount</th></tr></thead>
+      <tbody>${depositRowsHtml}
+      <tr style="background:#EDF1F4; font-weight:700;"><td colspan="5" style="padding:7px 8px;">Net (Deposits − Withdrawals)</td>
+        <td style="text-align:right; padding:7px 8px;">${fmtMoney(monthDep - monthWithdraw)}</td></tr></tbody>
+    </table>
+    ${reportGrandTotalBar('Grand Total Month Cost (Grocery + Shared)', fmtMoney(combinedCost))}
+    <div style="margin-top:14px; font-size:11px; color:#6B7280;">This report covers every member for ${month} — meals (lunch/dinner split), grocery costs, shared expenses (with full split breakdown), and deposits/withdrawals, plus a day-by-day and per-member summary. Figures may change if entries are edited after this export.</div>`;
+  return reportShell(body, `MessLedger — ${month} — Everyone`);
+}
+
+function downloadFullMonthAllMembersReport() {
+  openPrintableReport(buildFullMonthAllMembersReportHtml(currentMonth));
+}
+
 function downloadDailyMealRateReport() {
   const input = document.getElementById('personal-report-date');
   const dateStr = (input && input.value) || todayStr();

@@ -336,7 +336,7 @@ async function setTab(id) {
   const outgoing = id !== activeTab ? document.getElementById('content') : null;
   if (outgoing && outgoing.childNodes.length) {
     outgoing.classList.add('tab-content-leaving');
-    await new Promise(res => setTimeout(res, 130));
+    await new Promise(res => setTimeout(res, 150));
   }
   activeTab = id;
   if (moreSheetOpen) closeMoreSheet();
@@ -390,10 +390,11 @@ async function setTab(id) {
     }
   }
   clearCalcCache();
-  renderTabContent();
+  renderTabContent(true);
 }
 
-function renderTabContent() {
+function renderTabContent(animate) {
+  if (animate === undefined) animate = false;
   console.time('renderTabContent');
   renderTopWho();
   const c = document.getElementById('content');
@@ -434,14 +435,28 @@ function renderTabContent() {
     if (!_adminMonthAccessDraft) resetAdminMonthAccessDraft();
     c.innerHTML = renderSettings();
   }
-  // Replay the tab-switch fade/slide-in animation every time. The class is
-  // already present on #content from the previous render, so just adding
-  // it again wouldn't restart the CSS animation — removing it, forcing a
-  // reflow (reading offsetWidth), then re-adding it is what makes the
-  // browser treat it as a fresh animation start each time a tab changes.
-  c.classList.remove('tab-content-anim', 'tab-content-leaving');
-  void c.offsetWidth;
-  c.classList.add('tab-content-anim');
+  // Replay the tab-switch fade/slide-in animation ONLY when explicitly
+  // requested (animate=true) — i.e. a genuine tab switch (setTab()) or the
+  // initial paint right after login (enterApp()). Every other caller — the
+  // dozens of in-place repaints after adding/removing a meal, grocery cost,
+  // shared expense, or deposit/balance change on the SAME tab, plus the
+  // live Firestore listener repainting someone else's change — leaves
+  // animate unset and now defaults to false, so #content swaps in silently
+  // instead of replaying the fade+shift+scale entrance animation. That
+  // animation used to fire unconditionally on every render regardless of
+  // caller, which is why simply adding/removing a meal, cost, expense, or
+  // deposit made the whole page visibly "jolt" every single time — even
+  // though nothing about it was actually navigation. Tab switches and the
+  // post-login entrance still get the normal animated transition.
+  if (animate) {
+    // The class is already present on #content from the previous render, so
+    // just adding it again wouldn't restart the CSS animation — removing
+    // it, forcing a reflow (reading offsetWidth), then re-adding it is what
+    // makes the browser treat it as a fresh animation start each time.
+    c.classList.remove('tab-content-anim', 'tab-content-leaving');
+    void c.offsetWidth;
+    c.classList.add('tab-content-anim');
+  }
   console.timeEnd('renderTabContent');
 }
 

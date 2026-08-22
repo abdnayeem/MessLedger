@@ -382,10 +382,11 @@ function renderCosts() {
         color:#8493ab; pointer-events:none;
       }
       .cl-search-icon svg { width:13px; height:13px; }
-      .cl-search-input {
+      input.cl-search-input[type=text] {
         width:100%; height:34px; border-radius:8px; border:1.5px solid #dfe7f3;
-        background:#f9fbff; padding:0 11px 0 32px; font-size:13px; color:#16233b;
+        background:#f9fbff; padding:0 11px 0 32px !important; font-size:13px; color:#16233b;
         font-family:inherit; box-sizing:border-box; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+        min-height:34px;
       }
       .cl-search-input::placeholder { color:#9aa8bd; }
       .cl-search-input:focus {

@@ -44,7 +44,7 @@ function enterApp(m, opts) {
   }
   renderTopWho();
   renderTabs();
-  renderTabContent();
+  renderTabContent(true);
   startSessionCountdown();
   // Mandatory security gate: anyone still on the default PIN must change it
   // before doing anything else. The app underneath has already rendered

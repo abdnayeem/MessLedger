@@ -432,29 +432,35 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
    feels like a deliberate transition instead of an instant content swap.
    Kept short and subtle on purpose — this plays on every tab click, so
    anything longer/flashier would get old fast. Restarted from JS in
-   renderTabContent() (see 07-ui-shell.js) by toggling this class off/on. */
-.tab-content-anim{animation:tab-content-in var(--dur-slow) var(--ease);}
+   renderTabContent() (see 07-ui-shell.js) by toggling this class off/on.
+   Deliberately opacity+translateY ONLY (no scale()): #content can hold
+   large tables/cards, and animating `scale` on that much DOM forces the
+   browser to repaint every child at a different size on every frame
+   instead of just recompositing a layer — that's what actually read as
+   janky/"jhaki" on mid-range mobile, not the motion itself. Dropping scale
+   made the exact same fade+slide render smoothly on both desktop and
+   mobile. will-change hints the browser to promote #content to its own
+   GPU layer for the duration of the animation. Duration (420ms) is
+   deliberately the same value as the mobile bottom tab bar's own
+   mtab-pop/mtab-blob-pop bubble animation (see below) so the content and
+   the tab-bar bubble finish settling at the same moment instead of one
+   visibly lagging the other — that mismatch (previously 300ms content vs
+   420ms tab bubble) was part of what made the switch feel uncoordinated. */
+.tab-content-anim{animation:tab-content-in 420ms var(--ease); will-change:opacity, transform;}
 @keyframes tab-content-in{
-  from{opacity:0; transform:translateY(6px) scale(.99);}
-  to{opacity:1; transform:translateY(0) scale(1);}
+  from{opacity:0; transform:translateY(5px);}
+  to{opacity:1; transform:translateY(0);}
 }
-/* Quick fade+settle *out* of the current tab's content, played for 130ms
-   before setTab() swaps in the new tab (see 07-ui-shell.js). Without this
-   the old content vanished the same instant the new content appeared,
-   so the entrance animation had nothing to visually continue from and
-   read as an abrupt snap rather than a switch. */
-.tab-content-leaving{animation:tab-content-out 130ms var(--ease) forwards;}
+/* Quick fade+settle *out* of the current tab's content, played for 150ms
+   before setTab() swaps in the new tab (see 07-ui-shell.js — the JS
+   setTimeout there must match this duration exactly). Without this the
+   old content vanished the same instant the new content appeared, so the
+   entrance animation had nothing to visually continue from and read as an
+   abrupt snap rather than a switch. */
+.tab-content-leaving{animation:tab-content-out 150ms var(--ease) forwards; will-change:opacity, transform;}
 @keyframes tab-content-out{
-  from{opacity:1; transform:translateY(0) scale(1);}
-  to{opacity:0; transform:translateY(-4px) scale(.99);}
-}
-/* Desktop (sidebar nav) gets a slightly slower, more deliberate version of
-   the same fade+slide — the sidebar list stays on screen the whole time
-   (unlike the mobile bar, which is busy animating its own tab bubble), so
-   there's room for the content swap itself to read as a smoother, less
-   snappy transition without feeling sluggish. */
-@media (min-width:900px){
-  .tab-content-anim{animation-duration:480ms;}
+  from{opacity:1; transform:translateY(0);}
+  to{opacity:0; transform:translateY(-3px);}
 }
 
 /* ---------- 7b. Mobile bottom tab bar + "More" sheet ----------

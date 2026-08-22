@@ -249,7 +249,7 @@ function applyFreshState(fresh, force) {
       _deferredRenderTimer = null;
       const stillFocused = document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
       const stillTyping = stillFocused && (Date.now() - _lastInputAt) < 1500;
-      if (!stillTyping && !_maDirty) renderTabContent();
+      if (!stillTyping && !_maDirty) renderTabContent(false);
     }, 1600);
     return;
   }
@@ -257,7 +257,7 @@ function applyFreshState(fresh, force) {
     clearTimeout(_deferredRenderTimer);
     _deferredRenderTimer = null;
   }
-  renderTabContent();
+  renderTabContent(false);
 }
 let _snapshotUnsub = null;
 
@@ -514,4 +514,3 @@ function stopNotificationScheduler() {
     notifScheduleInterval = null;
   }
 }
-
