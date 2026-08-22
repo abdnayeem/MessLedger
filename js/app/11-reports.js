@@ -143,29 +143,93 @@ function reportStatBox(label, value, bg, border) {
 }
 
 function reportShell(bodyHtml, docTitle) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${docTitle||'MessLedger Report'}</title>
-    <style>
-      @media print { .no-print { display:none !important; } @page { margin: 14mm; } }
-      body{ font-family: Arial, Helvetica, sans-serif; color:#111827; margin:0; padding:24px; }
-      table{ width:100%; border-collapse:collapse; }
-      th, td { border-bottom: 1px solid #E5E7EB; }
-    </style></head><body>
-    <div class="no-print" style="margin-bottom:16px; text-align:right;">
-      <button onclick="window.print()" style="background:${REPORT_HEADER_BG}; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer;">🖨️ Print / Save as PDF</button>
-    </div>
-    ${bodyHtml}
-    </body></html>`;
+  // Rendered as an in-page overlay (see openPrintableReport) rather than a
+  // full HTML document opened via window.open(). On iOS home-screen web
+  // apps, window.open('_blank') kicks the user out of the standalone PWA
+  // and into Safari with no way back short of force-closing and reopening
+  // the app. Keeping the report inside the same document avoids that.
+  return `
+    <div id="msledger-report-overlay" role="dialog" aria-label="${docTitle || 'MessLedger Report'}">
+      <div class="msledger-report-topbar no-print">
+        <div class="msledger-report-title">${docTitle || 'MessLedger Report'}</div>
+        <div class="msledger-report-actions">
+          <button type="button" onclick="window.print()">🖨️ Print / Save as PDF</button>
+          <button type="button" onclick="closePrintableReport()">✕ Close</button>
+        </div>
+      </div>
+      <div class="msledger-report-body">
+        ${bodyHtml}
+      </div>
+    </div>`;
+}
+
+function ensureReportOverlayStyles() {
+  if (document.getElementById('msledger-report-overlay-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'msledger-report-overlay-styles';
+  style.textContent = `
+    #msledger-report-overlay{ position:fixed; inset:0; background:#fff; z-index:99999; overflow:auto;
+      font-family: Arial, Helvetica, sans-serif; color:#111827; -webkit-overflow-scrolling:touch; }
+    #msledger-report-overlay table{ width:100%; border-collapse:collapse; }
+    #msledger-report-overlay th, #msledger-report-overlay td{ border-bottom: 1px solid #E5E7EB; }
+    #msledger-report-overlay .msledger-report-topbar{ position:sticky; top:0; display:flex; gap:8px;
+      justify-content:space-between; align-items:center; padding:10px 16px; background:#fff;
+      border-bottom:1px solid #E5E7EB; z-index:2; }
+    #msledger-report-overlay .msledger-report-title{ font-weight:700; font-size:13.5px; color:#111827; }
+    #msledger-report-overlay .msledger-report-actions{ display:flex; gap:8px; flex-shrink:0; }
+    #msledger-report-overlay .msledger-report-actions button{ border:none; padding:8px 14px; border-radius:6px;
+      font-size:13px; cursor:pointer; white-space:nowrap; }
+    #msledger-report-overlay .msledger-report-actions button:first-child{ background:${REPORT_HEADER_BG}; color:#fff; }
+    #msledger-report-overlay .msledger-report-actions button:last-child{ background:#F3F4F6; color:#111827; }
+    #msledger-report-overlay .msledger-report-body{ padding:24px; }
+    body.msledger-report-open{ overflow:hidden; }
+    @media print {
+      body.msledger-report-open > *:not(#msledger-report-overlay){ display:none !important; }
+      #msledger-report-overlay{ position:static !important; overflow:visible !important; }
+      #msledger-report-overlay .no-print{ display:none !important; }
+      #msledger-report-overlay .msledger-report-body{ padding:0; }
+      @page{ margin: 14mm; }
+    }`;
+  document.head.appendChild(style);
+}
+
+let _reportOverlayHistoryPushed = false;
+
+function _handleReportOverlayPopstate() {
+  closePrintableReport(false);
 }
 
 function openPrintableReport(html) {
-  const w = window.open('', '_blank');
-  if (!w) {
-    alert('Please allow popups for this site to download the report.');
-    return;
+  ensureReportOverlayStyles();
+  closePrintableReport(false); // remove any existing overlay first, without touching history
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = html;
+  const overlay = wrapper.firstElementChild;
+  document.body.appendChild(overlay);
+  document.body.classList.add('msledger-report-open');
+  window.addEventListener('popstate', _handleReportOverlayPopstate);
+  // Push a history entry so the device/browser back button closes the
+  // report overlay instead of leaving the app with nothing to "go back" to.
+  try {
+    history.pushState({ msledgerReport: true }, '');
+    _reportOverlayHistoryPushed = true;
+  } catch (e) {
+    _reportOverlayHistoryPushed = false;
   }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+}
+
+function closePrintableReport(goBack) {
+  const overlay = document.getElementById('msledger-report-overlay');
+  window.removeEventListener('popstate', _handleReportOverlayPopstate);
+  if (!overlay) return;
+  overlay.remove();
+  document.body.classList.remove('msledger-report-open');
+  if (goBack !== false && _reportOverlayHistoryPushed) {
+    _reportOverlayHistoryPushed = false;
+    history.back();
+  } else {
+    _reportOverlayHistoryPushed = false;
+  }
 }
 
 function reportSectionTitle(text) {
