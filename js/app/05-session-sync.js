@@ -2,6 +2,21 @@
 // 05-session-sync.js  (originally app.js lines 1343-1718)
 // Session expiry/activity tracking, background pause, realtime sync (onSnapshot), auto-sync, session countdown UI, notification scheduler
 // ---------------------------------------------------------------------------
+
+// COST CONTROL: intentionally cap how long a single tab keeps a live
+// Firestore listener open. Every open tab with a live listener bills a read
+// for every document that changes anywhere in the collection, for as long
+// as the tab stays open — fine for one active tab, but adds up fast when
+// several members' tabs sit open in the background all day. After
+// LIVE_LISTENER_MAX_DURATION_MS, the listener is deliberately torn down and
+// a small dismiss-free banner tells the person to refresh if they want
+// live updates again. This is a DELIBERATE stop, separate from the
+// error-triggered polling fallback below — it must never be "fixed" by the
+// auto-reconnect logic, or it'd defeat the point.
+const LIVE_LISTENER_MAX_DURATION_MS = 60 * 1000; // 1 minute
+let _liveListenerCapTimer = null;
+let _liveListenerStoppedForCostSaving = false;
+
 function sessionInactivityMs() {
   const days = (state && state.settings && state.settings.sessionInactivityDays) || 7;
   return days * 24 * 60 * 60 * 1000;
@@ -142,7 +157,7 @@ function bindActivityTracking() {
           // redundant full read.
           _listenerPausedForBackground = false;
           startRealtimeSync();
-        } else if (!_snapshotUnsub) {
+        } else if (!_snapshotUnsub && !_liveListenerStoppedForCostSaving) {
           // BUGFIX (double full-collection read on every quick tab switch):
           // this used to unconditionally call syncFromServer() here — a
           // full storage.getAll() round trip — on EVERY visibility return,
@@ -157,6 +172,13 @@ function bindActivityTracking() {
           // only fires as a genuine fallback, when the listener somehow
           // isn't running at all (e.g. it errored out and hasn't retried
           // yet) — the one case where `state` really could be stale.
+          //
+          // The `!_liveListenerStoppedForCostSaving` check matters too: if
+          // the listener is down because we deliberately capped it (see
+          // LIVE_LISTENER_MAX_DURATION_MS above), a tab-focus event must
+          // NOT quietly fetch fresh data behind the scenes — the whole
+          // point of the banner is that refreshing is a conscious choice,
+          // not something that happens for free just by glancing at the tab.
           syncFromServer();
         }
       }
@@ -281,8 +303,153 @@ let _bootSnapshotResolvers = [];
 let _bootSnapshotRejecters = [];
 let _listenerRetryCount = 0; // resets to 0 once a listener actually succeeds
 
+// Small, sticky, dismiss-free banner telling the person live updates have
+// been intentionally paused to save Firestore reads, with a one-click way
+// to get them back. Injected once and reused (not rebuilt) so repeated
+// show/hide doesn't thrash the DOM or lose event listeners.
+//
+// Styled as a floating pill near the bottom of the screen (not a top
+// strip) with its own <style> tag injected right here — kept fully
+// self-contained in this JS file (no css/style.css dependency) so it
+// works regardless of what's deployed there, using the app's own CSS
+// custom properties (--surface/--border/--ink/--primary/--radius/--shadow)
+// wherever they're already defined so it still matches the app's look.
+function ensureLiveUpdatesOffBannerStyles() {
+  if (document.getElementById('live-updates-off-banner-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'live-updates-off-banner-styles';
+  style.textContent = `
+    #live-updates-off-banner{
+      position:fixed; left:50%; bottom:18px; transform:translate(-50%,0);
+      z-index:9999; display:flex; align-items:center; gap:10px;
+      max-width:calc(100% - 24px); box-sizing:border-box;
+      background:var(--surface,#fff);
+      border:1px solid var(--border,#DFE4EA);
+      border-radius:999px; padding:9px 10px 9px 14px;
+      box-shadow:var(--shadow-lg,0 20px 40px -14px rgba(28,39,51,.28));
+      font-size:13px; color:var(--ink,#1C2733);
+      animation:lub-in .28s cubic-bezier(.2,.8,.2,1);
+    }
+    #live-updates-off-banner.is-hidden{ display:none; }
+    #live-updates-off-banner.is-leaving{ animation:lub-out .18s ease-in forwards; }
+    @keyframes lub-in{
+      from{ opacity:0; transform:translate(-50%,10px) scale(.96); }
+      to{ opacity:1; transform:translate(-50%,0) scale(1); }
+    }
+    @keyframes lub-out{
+      from{ opacity:1; transform:translate(-50%,0) scale(1); }
+      to{ opacity:0; transform:translate(-50%,10px) scale(.96); }
+    }
+    #live-updates-off-banner .lub-dot{
+      width:8px; height:8px; border-radius:50%; flex-shrink:0;
+      background:var(--ink-faint,#8A97A6);
+    }
+    #live-updates-off-banner .lub-text{
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font-weight:600; color:var(--ink-soft,#51606F);
+    }
+    #live-updates-off-banner .lub-refresh{
+      display:flex; align-items:center; gap:6px; flex-shrink:0;
+      background:var(--primary,#33607F); color:#fff; border:none;
+      border-radius:999px; padding:7px 14px; font-size:12.5px; font-weight:700;
+      cursor:pointer; transition:transform .15s ease, filter .15s ease;
+    }
+    #live-updates-off-banner .lub-refresh:hover{ filter:brightness(1.08); }
+    #live-updates-off-banner .lub-refresh:active{ transform:scale(.96); }
+    @media (prefers-reduced-motion: reduce){
+      #live-updates-off-banner{ animation:none; }
+      #live-updates-off-banner.is-leaving{ animation:none; }
+    }
+    @media (max-width:420px){
+      #live-updates-off-banner{ bottom:12px; padding:8px 8px 8px 12px; gap:8px; }
+      #live-updates-off-banner .lub-text{ font-size:12px; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function showLiveUpdatesOffBanner() {
+  ensureLiveUpdatesOffBannerStyles();
+  let el = document.getElementById('live-updates-off-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'live-updates-off-banner';
+    el.innerHTML =
+      '<span class="lub-dot"></span>' +
+      '<span class="lub-text">Live updates off</span>' +
+      '<button type="button" id="live-updates-refresh-btn" class="lub-refresh">' +
+      '<i class="fas fa-arrow-rotate-right"></i> Refresh</button>';
+    document.body.appendChild(el);
+    document.getElementById('live-updates-refresh-btn').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing…';
+      resumeLiveListenerFromBanner();
+    });
+  }
+  el.classList.remove('is-hidden', 'is-leaving');
+}
+
+function hideLiveUpdatesOffBanner() {
+  const el = document.getElementById('live-updates-off-banner');
+  if (!el || el.classList.contains('is-hidden')) return;
+  // Small exit animation instead of an abrupt disappear.
+  el.classList.add('is-leaving');
+  setTimeout(() => {
+    el.classList.add('is-hidden');
+    el.classList.remove('is-leaving');
+    // Reset the refresh button back to its resting state for next time.
+    const btn = document.getElementById('live-updates-refresh-btn');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-arrow-rotate-right"></i> Refresh';
+    }
+  }, 180);
+}
+
+// Deliberately tears down the live listener after it's been open for
+// LIVE_LISTENER_MAX_DURATION_MS, to cap how many reads one open tab can
+// rack up. Distinct from the error-triggered fallback in the onError
+// handler below — this one is scheduled (not a failure), so it must NOT
+// fall back to 60s polling (that would just trade one steady cost for
+// another instead of actually saving anything).
+function stopLiveListenerForCostSaving() {
+  if (_liveListenerCapTimer) {
+    clearTimeout(_liveListenerCapTimer);
+    _liveListenerCapTimer = null;
+  }
+  if (_snapshotUnsub) {
+    _snapshotUnsub();
+    _snapshotUnsub = null;
+  }
+  _liveListenerStoppedForCostSaving = true;
+  showLiveUpdatesOffBanner();
+}
+
+// Called when the person taps "Refresh" on the banner: pulls the latest
+// data once (so the screen is current right now) and re-arms the live
+// listener for another LIVE_LISTENER_MAX_DURATION_MS window, same as a
+// fresh login would.
+function resumeLiveListenerFromBanner() {
+  hideLiveUpdatesOffBanner();
+  _liveListenerStoppedForCostSaving = false;
+  if (session.userId) {
+    const c = document.getElementById('content');
+    if (c) c.innerHTML = '<div class="card empty"><i class="fas fa-spinner fa-spin"></i>&nbsp; Refreshing…</div>';
+    syncFromServer(true).finally(() => {
+      if (activeTab) renderTabContent(true);
+    });
+  }
+  ensureRealtimeListener();
+}
+
 function ensureRealtimeListener() {
   if (_snapshotUnsub) return; // already listening — boot or otherwise
+  // Deliberately paused for cost saving (see stopLiveListenerForCostSaving())
+  // — only the banner's "Refresh" button (resumeLiveListenerFromBanner) is
+  // allowed to re-arm it, not a background retry loop, or the 1-minute cap
+  // would never actually save anything.
+  if (_liveListenerStoppedForCostSaving) return;
   if (typeof storage.onSnapshotAll !== 'function') {
     // Deployed storage.js predates onSnapshotAll() — nothing to attach to.
     // waitForFirstSnapshot() below falls back to a normal one-time fetch,
@@ -306,6 +473,27 @@ function ensureRealtimeListener() {
       return;
     }
     _listenerRetryCount = 0; // got real data — any earlier hiccup is behind us
+    // BUGFIX (runaway Firestore reads): if we'd earlier fallen back to
+    // polling (see the onError handler below and startAutoSync()), the
+    // live listener working again right here means the polling interval
+    // is now redundant — every tick was re-reading the ENTIRE collection
+    // every 6-60s on top of what the listener itself already delivers for
+    // free. Without this, a single transient error could leave a tab
+    // polling the whole collection forever, even after the listener
+    // silently recovered, which is what actually blew up read costs.
+    if (_autoSyncInterval) {
+      clearInterval(_autoSyncInterval);
+      _autoSyncInterval = null;
+    }
+    // (Re)arm the cost-saving cap every time we get a real snapshot — not
+    // just once — so the 1-minute window always counts from "listener is
+    // actually delivering data" rather than "first attach", and a listener
+    // that reconnected after an error still gets capped correctly.
+    if (_liveListenerCapTimer) clearTimeout(_liveListenerCapTimer);
+    _liveListenerCapTimer = setTimeout(() => {
+      _liveListenerCapTimer = null;
+      stopLiveListenerForCostSaving();
+    }, LIVE_LISTENER_MAX_DURATION_MS);
     _bootSnapshotItems = items;
     if (!_firstSnapshotSeen) {
       _firstSnapshotSeen = true;
@@ -405,6 +593,12 @@ function stopRealtimeSync() {
     clearInterval(_autoSyncInterval);
     _autoSyncInterval = null;
   }
+  if (_liveListenerCapTimer) {
+    clearTimeout(_liveListenerCapTimer);
+    _liveListenerCapTimer = null;
+  }
+  _liveListenerStoppedForCostSaving = false;
+  hideLiveUpdatesOffBanner();
 }
 // Fallback only — used if the realtime listener above isn't available or
 // fails. Fetches fresh state and applies it the same way the listener does.
@@ -424,13 +618,49 @@ async function syncFromServer(force) {
 }
 let _autoSyncInterval = null;
 
+let _autoSyncFailTicks = 0;
+const AUTO_SYNC_MAX_FAIL_TICKS = 3; // 3 x 60s = give up after ~3 minutes, same cap policy as the deliberate 1-min stop
+
 function startAutoSync() {
   if (_autoSyncInterval) return;
+  // BUGFIX (runaway Firestore reads / ~500K reads on a 22-day, 10-user
+  // mess): this used to poll the ENTIRE collection every 6 seconds,
+  // forever, with nothing ever trying to get back onto the live listener
+  // — so a single transient listener error (network blip, brief
+  // permission hiccup, etc.) permanently downgraded that tab to a full
+  // collection re-read 10x/minute for the rest of the session. Firestore
+  // bills per document returned, so even a modest collection (tens to a
+  // few hundred docs) turns into tens of thousands of reads per hour, per
+  // stuck tab. Changes:
+  //  1. Every tick now also retries ensureRealtimeListener() first. If it
+  //     reconnects, the onSnapshotAll success callback clears this
+  //     interval itself — so polling is genuinely temporary, not permanent.
+  //  2. The interval itself is 60s instead of 6s — a 10x cheaper safety
+  //     net for the window before the listener reconnects, instead of the
+  //     primary sync mechanism.
+  //  3. If it still hasn't reconnected after AUTO_SYNC_MAX_FAIL_TICKS
+  //     tries (~3 min), stop polling entirely and show the same "Live
+  //     updates off — Refresh" banner as the deliberate 1-min cap, instead
+  //     of polling forever at a reduced-but-still-nonzero cost. A stuck
+  //     permission/network problem shouldn't cost more than a few minutes
+  //     of polling before it's treated the same as any other "come back
+  //     and refresh" pause.
+  _autoSyncFailTicks = 0;
   _autoSyncInterval = setInterval(() => {
     if (document.hidden) return; // paused while backgrounded — same battery reasoning as the countdown timer
     if (!session.userId) return;
-    syncFromServer();
-  }, 6000); // every 6s — only used as a fallback if the realtime listener isn't available
+    if (!_snapshotUnsub) ensureRealtimeListener(); // try to get back on the live listener
+    if (_snapshotUnsub) return; // reconnected this tick — nothing more to do
+    _autoSyncFailTicks++;
+    if (_autoSyncFailTicks >= AUTO_SYNC_MAX_FAIL_TICKS) {
+      clearInterval(_autoSyncInterval);
+      _autoSyncInterval = null;
+      _autoSyncFailTicks = 0;
+      stopLiveListenerForCostSaving(); // reuses the same banner + manual-refresh flow
+      return;
+    }
+    syncFromServer(); // still not up — fall back to one poll this tick
+  }, 60000); // every 60s — fallback only; the live listener is the primary sync path
 }
 
 function formatDuration(ms) {
