@@ -12,6 +12,25 @@ function _markEdited() {
   // slice (which a failed-login persistMembers() call could otherwise
   // overwrite the good cache with).
   if (_hasFullState) writeLocalCache(state);
+  // A real edit (deposit, expense, meal tick, cost, etc.) is much stronger
+  // evidence of "actively using this tab" than a stray click or scroll —
+  // and it's about to write to Firestore, so the person is clearly not
+  // just idly glancing at stale data. If the live listener had been
+  // deliberately paused for cost saving (see LIVE_LISTENER_MAX_DURATION_MS
+  // in 05-session-sync.js), bring it back right here, quietly — no banner,
+  // no "Refreshing…" screen takeover — so the write and whatever comes
+  // back from it are reflected live, instead of the person having to
+  // separately notice the banner and tap Refresh first. If the listener
+  // is already live, this just counts as activity and extends its cap.
+  if (typeof _liveListenerStoppedForCostSaving !== 'undefined') {
+    if (_liveListenerStoppedForCostSaving) {
+      _liveListenerStoppedForCostSaving = false;
+      hideLiveUpdatesOffBanner();
+      ensureRealtimeListener();
+    } else {
+      resetLiveListenerCapOnActivity();
+    }
+  }
 }
 
 // ---- Pending-write tracking (fixes: "showed success but the data wasn't

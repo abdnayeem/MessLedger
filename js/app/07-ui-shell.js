@@ -201,6 +201,40 @@ function tabsForRole() {
   return base;
 }
 
+// BUGFIX (tab switch looked like an abrupt "jhaki"/jump instead of a smooth
+// color change): renderTabs() rebuilds #tabs'/the mobile tabbar's entire
+// innerHTML from scratch on every single tab click. css/style.css already
+// has transitions on .tab-btn i / .tab-icon-box / .mtab-btn for exactly
+// this (color .15s ease, background .15s ease) — but a CSS transition only
+// animates a property changing on the SAME DOM node over time. Destroying
+// the old button and creating a brand new one already in its final
+// "active" state (which is what innerHTML replacement does) gives the
+// transition nothing to animate from, so the highlight just snaps into
+// place instead of fading/sliding in. This walks the already-rendered
+// buttons (tagged with data-tab-id — see renderTabs()/renderMobileTabbar()/
+// renderMoreSheetBody() above) and only toggles the `active` class on the
+// SAME nodes, so the existing CSS transitions actually get to run.
+function updateActiveTabHighlight() {
+  document.querySelectorAll('#tabs .tab-btn[data-tab-id]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tabId === activeTab);
+  });
+  const primaryTabIds = [];
+  document.querySelectorAll('#mobile-tabbar .mtab-btn[data-tab-id]').forEach(btn => {
+    const isActive = btn.dataset.tabId === activeTab;
+    btn.classList.toggle('active', isActive);
+    primaryTabIds.push(btn.dataset.tabId);
+  });
+  const moreBtn = document.querySelector('#mobile-tabbar .mtab-more');
+  if (moreBtn) {
+    // "More" itself is active when the selected tab isn't one of the fixed
+    // primary slots — i.e. it's one of the tabs tucked in the sheet.
+    moreBtn.classList.toggle('active', !primaryTabIds.includes(activeTab));
+  }
+  document.querySelectorAll('#more-sheet-body .more-sheet-item[data-tab-id]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tabId === activeTab);
+  });
+}
+
 function renderTabs() {
   const tabs = tabsForRole();
   let lastGroup = null;
@@ -213,7 +247,7 @@ function renderTabs() {
     const groupLabelHtml = group !== lastGroup ? `<div class="tab-group-label">${group}</div>` : '';
     lastGroup = group;
     const pinClass = t.id === 'settings' ? ' tab-btn-pinned' : '';
-    return `${groupLabelHtml}<button class="tab-btn ${activeTab===t.id?'active':''}${pinClass}" onclick="setTab('${t.id}')">
+    return `${groupLabelHtml}<button class="tab-btn ${activeTab===t.id?'active':''}${pinClass}" data-tab-id="${t.id}" onclick="setTab('${t.id}')">
       <span class="tab-icon-box"><i class="fas ${cfg.icon}"></i></span>
       <span class="tab-label">${cfg.label}</span>
       <span class="tab-chevron"><i class="fas fa-chevron-right"></i></span>
@@ -246,7 +280,7 @@ function renderMobileTabbar(tabs) {
 
   const mtabBtn = t => {
     const cfg = tabConfig[t.id] || { label: t.id, icon: 'fa-circle' };
-    return `<button type="button" class="mtab-btn ${activeTab === t.id ? 'active' : ''}" onclick="setTab('${t.id}')">
+    return `<button type="button" class="mtab-btn ${activeTab === t.id ? 'active' : ''}" data-tab-id="${t.id}" onclick="setTab('${t.id}')">
       <span class="mtab-icon"><i class="fas ${cfg.icon}"></i></span>
       <span class="mtab-label">${cfg.label}</span>
     </button>`;
@@ -279,7 +313,7 @@ function renderMoreSheetBody(rest) {
     const group = tabGroups[t.id] || 'More';
     const groupLabelHtml = group !== lastGroup ? `<div class="more-sheet-group-label">${group}</div>` : '';
     lastGroup = group;
-    return `${groupLabelHtml}<button type="button" class="more-sheet-item ${activeTab === t.id ? 'active' : ''}" onclick="selectFromMoreSheet('${t.id}')">
+    return `${groupLabelHtml}<button type="button" class="more-sheet-item ${activeTab === t.id ? 'active' : ''}" data-tab-id="${t.id}" onclick="selectFromMoreSheet('${t.id}')">
       <span class="more-sheet-item-icon"><i class="fas ${cfg.icon}"></i></span>
       <span class="more-sheet-item-label">${cfg.label}</span>
       <i class="fas fa-chevron-right more-sheet-item-chevron"></i>
@@ -342,7 +376,16 @@ async function setTab(id) {
   if (moreSheetOpen) closeMoreSheet();
   if (id !== 'members') _maDirty = false;
   if (id !== 'settings') _adminMonthAccessDraft = null; // force a fresh draft next time Settings is opened
-  renderTabs();
+  // Build the sidebar/tabbar DOM once (login, or role/tab-set genuinely
+  // changed); every subsequent tab click just toggles which button has the
+  // `active` class on the SAME nodes (see updateActiveTabHighlight() above)
+  // so the CSS color/background transitions can actually animate instead
+  // of a rebuilt node snapping straight into its final state.
+  if (document.querySelectorAll('#tabs .tab-btn[data-tab-id]').length) {
+    updateActiveTabHighlight();
+  } else {
+    renderTabs();
+  }
   scrollContentToTop();
   // BUGFIX (full-collection Firestore read on every single tab click): this
   // used to call loadState() here — a full re-fetch of the entire

@@ -140,9 +140,54 @@ function findMemberByPhone(entered) {
   return m || null;
 }
 
+// Tracks whether the (deliberately tucked-away) sign-in form has been
+// revealed on the maintenance screen — see renderLogin() below. Resets to
+// false on every fresh renderLogin() call from outside (e.g. logout()),
+// but toggleMaintenanceLoginForm() flips it and re-renders in place.
+let _maintenanceLoginFormOpen = false;
+
+function toggleMaintenanceLoginForm() {
+  _maintenanceLoginFormOpen = !_maintenanceLoginFormOpen;
+  renderLogin();
+}
+
 function renderLogin() {
   hideBootLoader();
   const s = document.getElementById('login-screen');
+  const maintenanceOn = !!(state && state.settings && state.settings.maintenanceMode);
+  if (maintenanceOn && !_maintenanceLoginFormOpen) {
+    // Default maintenance view: just the message, no visible sign-in
+    // form — see the maintenanceMode comment in defaultSettings()
+    // (02-state-storage.js) for the full design. The small link below is
+    // the only way back to the normal form, deliberately unobtrusive so
+    // it reads as "for admins", not an invitation for everyone to keep
+    // trying to log in during a lockdown.
+    const msg = (state.settings.maintenanceMessage || '').trim() ||
+      "We're doing scheduled maintenance right now. Please check back shortly.";
+    s.innerHTML = `
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="logo-dot"><img src="favicon.png" alt="" width="20" height="20" style="width:100%; height:100%; display:block; border-radius:inherit;"></div>
+          <div>
+            <h1>MessLedger</h1>
+            <div class="login-sub">Meal &amp; expense tracker</div>
+          </div>
+        </div>
+        <div class="card" style="border:1px solid var(--warning); background:var(--warning-bg); margin:14px 0;">
+          <div style="display:flex; align-items:flex-start; gap:10px;">
+            <i class="fas fa-triangle-exclamation" style="color:var(--warning); margin-top:2px;"></i>
+            <div>
+              <div style="font-weight:700; margin-bottom:4px;">Under maintenance</div>
+              <div class="small-note" style="margin:0; white-space:pre-wrap;">${escapeHtml(msg)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="login-links">
+          <button class="link-btn subtle" onclick="toggleMaintenanceLoginForm()">Super Admin sign in</button>
+        </div>
+      </div>`;
+    return;
+  }
   s.innerHTML = `
     <div class="login-card">
       <div class="login-brand">
@@ -152,7 +197,7 @@ function renderLogin() {
           <div class="login-sub">Meal &amp; expense tracker</div>
         </div>
       </div>
-      <div class="login-tagline">Enter your phone number and PIN to continue.</div>
+      <div class="login-tagline">${maintenanceOn ? 'Super Admin sign-in only — the app is under maintenance for everyone else.' : 'Enter your phone number and PIN to continue.'}</div>
       <label>Your phone number</label>
       <input type="tel" id="login-phone" inputmode="tel" placeholder="Enter your number" autocomplete="tel">
       <label>Your PIN</label>
@@ -160,7 +205,7 @@ function renderLogin() {
       <div class="error-text" id="login-error"></div>
       <button class="btn" id="login-btn" style="width:100%; text-align:center;">Sign In</button>
       <div class="login-links">
-        <button class="link-btn subtle" onclick="forgotPin()">Forgot PIN?</button>
+        ${maintenanceOn ? '<button class="link-btn subtle" onclick="toggleMaintenanceLoginForm()">Back</button>' : '<button class="link-btn subtle" onclick="forgotPin()">Forgot PIN?</button>'}
       </div>
     </div>`;
   document.getElementById('login-btn').addEventListener('click', doLogin);
@@ -241,6 +286,19 @@ async function doLogin() {
       return;
     }
     errBox.textContent = 'Incorrect PIN.';
+    resetBtn();
+    return;
+  }
+  // Superadmin-only kill switch — see the maintenanceMode/maintenanceMessage
+  // comment in defaultSettings() (02-state-storage.js). Checked here, after
+  // the PIN is confirmed correct, so a wrong PIN still shows "Incorrect
+  // PIN" instead of leaking whether maintenance is on to someone who
+  // hasn't even authenticated. Deliberately does NOT touch
+  // failedLoginAttempts — being correct-but-blocked isn't a failed
+  // attempt, and shouldn't risk locking that member's account out too.
+  if (state.settings.maintenanceMode && m.role !== 'superadmin') {
+    errBox.textContent = (state.settings.maintenanceMessage || '').trim() ||
+      "We're doing scheduled maintenance right now. Please check back shortly.";
     resetBtn();
     return;
   }
@@ -415,6 +473,7 @@ function logout() {
   }
   _listenerPausedForBackground = false;
   clearPersistedSession();
+  _maintenanceLoginFormOpen = false;
   if (notifPanelOpen) {
     notifPanelOpen = false;
     document.removeEventListener('click', closeNotifPanelOnOutsideClick);

@@ -201,6 +201,29 @@ function renderSettings() {
       </div>
     </div>
     ` : ''}
+    ${session.role === 'superadmin' ? `
+    <div class="card" style="border:1px solid ${s.maintenanceMode ? 'var(--danger)' : 'var(--border)'};">
+      <h2><i class="fas fa-triangle-exclamation"></i> Maintenance Mode</h2>
+      <div class="small-note" style="margin-bottom:14px;">
+        When ON: only super admins can sign in. Everyone else sees the message below instead of the login screen, and anyone already using the app (except super admins) is immediately signed out to this same message — no further data is fetched for them while this is on.
+      </div>
+      ${s.maintenanceMode ? `<div class="small-note" style="color:var(--danger); font-weight:700; margin-bottom:10px;"><i class="fas fa-circle" style="font-size:8px;"></i> Currently ON — only super admins can use the app</div>` : ''}
+      <div class="form-grid">
+        <div>
+          <label>Maintenance Mode</label>
+          <select id="set-maintenanceMode">
+            <option value="false" ${!s.maintenanceMode?'selected':''}>Off</option>
+            <option value="true" ${s.maintenanceMode?'selected':''}>On</option>
+          </select>
+        </div>
+        <div>
+          <label>Message shown to everyone else</label>
+          <textarea id="set-maintenanceMessage" rows="3" placeholder="e.g. We're doing scheduled maintenance — back shortly.">${escapeHtml(s.maintenanceMessage || '')}</textarea>
+        </div>
+      </div>
+      <button class="btn" style="${s.maintenanceMode?'':'background:var(--danger); border-color:var(--danger);'}" onclick="saveMaintenanceSettings()">${s.maintenanceMode ? 'Save' : 'Save &amp; Turn On'}</button>
+    </div>
+    ` : ''}
     <div class="card">
       <h2>Session &amp; Login</h2>
       <div class="small-note" style="margin-bottom:14px;">Super Admin sessions always end when the browser/tab is closed, no matter what's set here. This only controls Admin and Member auto-logout.</div>
@@ -417,12 +440,48 @@ async function saveSettings() {
     addedByVisibility,
     mealsHistoryVisibility,
     adminMonthAccess: state.settings.adminMonthAccess,
-    notifications: state.settings.notifications
+    notifications: state.settings.notifications,
+    // Not edited by this form — see saveMaintenanceSettings() below. Carried
+    // forward as-is so saving any other setting here doesn't silently wipe
+    // maintenance mode back off.
+    maintenanceMode: state.settings.maintenanceMode || false,
+    maintenanceMessage: state.settings.maintenanceMessage || ''
   };
   await persistSettings();
   lastActivityWriteAt = 0;
   refreshSessionActivity();
   showToast('Settings saved.', 'success');
+  renderTabContent();
+}
+// Superadmin-only kill switch — see the maintenanceMode/maintenanceMessage
+// comment in defaultSettings() (02-state-storage.js) for the full design:
+// once this saves with maintenanceMode true, doLogin() (06-auth.js) blocks
+// every non-superadmin login, and applyFreshState() (05-session-sync.js)
+// signs out anyone already inside the app the moment this snapshot reaches
+// them. Kept as its own small save handler (like the notification settings
+// card above) so it's a single, deliberate action — not bundled into the
+// big saveSettings() form where it could be flipped on by accident while
+// saving something unrelated.
+async function saveMaintenanceSettings() {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can do this.', 'error');
+    return;
+  }
+  const maintenanceMode = document.getElementById('set-maintenanceMode').value === 'true';
+  const maintenanceMessage = document.getElementById('set-maintenanceMessage').value.trim();
+  if (maintenanceMode && !maintenanceMessage) {
+    showToast('Add a message for the people who\'ll see it before turning this on.', 'error');
+    return;
+  }
+  if (maintenanceMode && !confirm('Turn maintenance mode ON? Everyone except super admins will be signed out immediately and unable to log back in until you turn this off.')) {
+    return;
+  }
+  state.settings.maintenanceMode = maintenanceMode;
+  state.settings.maintenanceMessage = maintenanceMessage;
+  await persistSettings();
+  lastActivityWriteAt = 0;
+  refreshSessionActivity();
+  showToast(maintenanceMode ? 'Maintenance mode is ON.' : 'Maintenance mode is off.', 'success');
   renderTabContent();
 }
 async function resetSettings() {

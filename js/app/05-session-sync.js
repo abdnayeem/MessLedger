@@ -17,6 +17,32 @@ const LIVE_LISTENER_MAX_DURATION_MS = 60 * 1000; // 1 minute
 let _liveListenerCapTimer = null;
 let _liveListenerStoppedForCostSaving = false;
 
+// Starts (or restarts) the 1-minute countdown to the deliberate cost-saving
+// stop. Called once when the live listener first connects/reconnects.
+function armLiveListenerCap() {
+  if (_liveListenerCapTimer) clearTimeout(_liveListenerCapTimer);
+  _liveListenerCapTimer = setTimeout(() => {
+    _liveListenerCapTimer = null;
+    stopLiveListenerForCostSaving();
+  }, LIVE_LISTENER_MAX_DURATION_MS);
+}
+
+// Resets the cap countdown on THIS tab's own activity (click/keydown/
+// mousemove/scroll/touchstart/input — see bindActivityTracking() below).
+// Deliberately does NOT get called just because data arrives from the
+// live listener — another member's deposit/meal-tick keeps THEIR tab's
+// cap alive, but shouldn't keep an actually-idle tab's cap alive too.
+// "1 minute" here means "1 minute since you last touched this tab",
+// not "1 minute since the mess last had any activity at all".
+let _lastCapResetAt = 0;
+function resetLiveListenerCapOnActivity() {
+  if (!_snapshotUnsub || _liveListenerStoppedForCostSaving) return; // nothing live to extend
+  const now = Date.now();
+  if (now - _lastCapResetAt < 2000) return; // throttle — avoid re-creating the timer on every mousemove
+  _lastCapResetAt = now;
+  armLiveListenerCap();
+}
+
 function sessionInactivityMs() {
   const days = (state && state.settings && state.settings.sessionInactivityDays) || 7;
   return days * 24 * 60 * 60 * 1000;
@@ -109,12 +135,21 @@ function bindActivityTracking() {
     document.addEventListener(evt, refreshSessionActivity, {
       passive: true
     });
+    // Same events also keep the live-listener cap alive — see
+    // resetLiveListenerCapOnActivity() above. This is deliberately based
+    // on THIS tab's own activity, not on data arriving from other members
+    // (which does NOT reset the cap) — so a genuinely idle tab still goes
+    // quiet after a minute even while other people keep using the mess.
+    document.addEventListener(evt, resetLiveListenerCapOnActivity, {
+      passive: true
+    });
   });
   // Real edit activity (typing a number, adjusting a textarea, picking a
   // select option) — separate from just having a field focused. See
   // applyFreshState() for why this distinction matters for realtime sync.
   document.addEventListener('input', () => {
     _lastInputAt = Date.now();
+    resetLiveListenerCapOnActivity();
   }, {
     passive: true
   });
@@ -151,12 +186,25 @@ function bindActivityTracking() {
       // instead of waiting for the person to notice and manually refresh.
       if (session.userId) {
         if (_listenerPausedForBackground) {
-          // The listener was torn down while backgrounded — restarting it
-          // fetches a fresh snapshot on its own, so a separate
-          // syncFromServer() call on top of that would just be a second,
-          // redundant full read.
+          // BUGFIX (inconsistent behavior): this used to silently call
+          // startRealtimeSync() here — reconnecting (and paying for a
+          // fresh full-collection read) the instant the tab became visible
+          // again, with no banner at all. That meant a tab backgrounded
+          // for 2+ minutes (e.g. switching to another app on a phone for a
+          // few minutes) behaved completely differently from the
+          // deliberate 1-minute foreground-idle cap above: one path showed
+          // "Live updates off — Refresh" and waited for a conscious tap,
+          // the other silently reconnected on its own. Now both paths are
+          // the same: coming back to a backgrounded-and-paused tab shows
+          // the banner too, and only the person tapping Refresh (or making
+          // an actual edit — see _markEdited() in 03-persistence.js)
+          // reconnects it. This does mean frequent app-switching now shows
+          // the banner more often — that's the deliberate trade-off for
+          // consistent behavior instead of silently paying for a
+          // reconnect read every time the tab regains focus.
           _listenerPausedForBackground = false;
-          startRealtimeSync();
+          _liveListenerStoppedForCostSaving = true;
+          showLiveUpdatesOffBanner();
         } else if (!_snapshotUnsub && !_liveListenerStoppedForCostSaving) {
           // BUGFIX (double full-collection read on every quick tab switch):
           // this used to unconditionally call syncFromServer() here — a
@@ -208,6 +256,23 @@ function bindActivityTracking() {
 // fallback fetch): clears the stale-cache trap, and avoids clobbering an
 // in-progress edit (typing in a field, or unsaved Monthly Active checkboxes).
 function applyFreshState(fresh, force) {
+  // Superadmin-only kill switch — see the maintenanceMode/maintenanceMessage
+  // comment in defaultSettings() (02-state-storage.js) for the full design.
+  // Checked first, before the typing/pending-write guards below: if a
+  // super admin just turned this on, everyone else currently inside the
+  // app needs to be bounced out to the maintenance message right away,
+  // not held back by "someone's mid-edit" logic that's meant for normal
+  // data updates, not an admin lockdown. Reusing logout() here is
+  // deliberate — it already does everything needed (tear down the
+  // listener/polling so no further reads happen, clear the persisted
+  // session, hide the app, show the login screen), and renderLogin()
+  // itself shows the maintenance message once it sees maintenanceMode on.
+  if (fresh && fresh.settings && fresh.settings.maintenanceMode &&
+      session && session.userId && session.role !== 'superadmin') {
+    state = fresh; // so renderLogin()'s maintenance check below sees the current message text
+    logout();
+    return;
+  }
   const activeTag = document.activeElement && document.activeElement.tagName;
   const isFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
   // Being focused isn't the same as being edited — a field can sit focused
@@ -485,15 +550,14 @@ function ensureRealtimeListener() {
       clearInterval(_autoSyncInterval);
       _autoSyncInterval = null;
     }
-    // (Re)arm the cost-saving cap every time we get a real snapshot — not
-    // just once — so the 1-minute window always counts from "listener is
-    // actually delivering data" rather than "first attach", and a listener
-    // that reconnected after an error still gets capped correctly.
-    if (_liveListenerCapTimer) clearTimeout(_liveListenerCapTimer);
-    _liveListenerCapTimer = setTimeout(() => {
-      _liveListenerCapTimer = null;
-      stopLiveListenerForCostSaving();
-    }, LIVE_LISTENER_MAX_DURATION_MS);
+    // Arm the cost-saving cap only when it's not already running — a fresh
+    // connect/reconnect starts the 1-minute countdown, but data pushed in
+    // by OTHER members through this same snapshot must not extend it.
+    // Keeping it alive from here on is resetLiveListenerCapOnActivity()'s
+    // job (see top of file), driven by THIS tab's own activity — that's
+    // what makes "1 minute" mean "1 minute since you last touched this
+    // tab" rather than "1 minute since the mess last had any activity".
+    if (!_liveListenerCapTimer) armLiveListenerCap();
     _bootSnapshotItems = items;
     if (!_firstSnapshotSeen) {
       _firstSnapshotSeen = true;
@@ -619,7 +683,7 @@ async function syncFromServer(force) {
 let _autoSyncInterval = null;
 
 let _autoSyncFailTicks = 0;
-const AUTO_SYNC_MAX_FAIL_TICKS = 3; // 3 x 60s = give up after ~3 minutes, same cap policy as the deliberate 1-min stop
+const AUTO_SYNC_MAX_FAIL_TICKS = 3; // 3 x 60s = give up after ~3 minutes, same cap policy as the deliberate 15-sec stop
 
 function startAutoSync() {
   if (_autoSyncInterval) return;
@@ -640,7 +704,7 @@ function startAutoSync() {
   //     primary sync mechanism.
   //  3. If it still hasn't reconnected after AUTO_SYNC_MAX_FAIL_TICKS
   //     tries (~3 min), stop polling entirely and show the same "Live
-  //     updates off — Refresh" banner as the deliberate 1-min cap, instead
+  //     updates off — Refresh" banner as the deliberate 15-sec cap, instead
   //     of polling forever at a reduced-but-still-nonzero cost. A stuck
   //     permission/network problem shouldn't cost more than a few minutes
   //     of polling before it's treated the same as any other "come back

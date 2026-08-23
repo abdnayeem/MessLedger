@@ -27,6 +27,29 @@ function paintFromState(opts) {
     // dropping this check doesn't let a stale role leak through; it just
     // stops punishing people for a role change with an unwanted logout.
     if (m) {
+      // Superadmin-only kill switch — see the maintenanceMode/
+      // maintenanceMessage comment in defaultSettings() (02-state-storage.js).
+      // BUGFIX: this check was missing entirely on the persisted-session
+      // auto-login path. doLogin() blocks a fresh manual sign-in, and
+      // applyFreshState() signs out someone already active inside an open
+      // session — but a device with a remembered (persisted) session for a
+      // non-superadmin member was resuming straight into the app on every
+      // page load/reopen, completely bypassing maintenance mode, until
+      // some unrelated data change happened to trigger the next live
+      // snapshot. `state.settings` is already the current data here (just
+      // set from fetchLoginScreenState() right before this call — see
+      // init() above), so this is checked before ever calling enterApp()/
+      // enterAppWithFullData(), the same way doLogin() checks before
+      // calling either of those.
+      if (state.settings.maintenanceMode && m.role !== 'superadmin') {
+        // Deliberately NOT clearing the persisted session — maintenance is
+        // a temporary state, not a reason to force this person to type
+        // their PIN again once it's back off. Just skip auto-entering for
+        // now; the same persisted session resumes normally next time this
+        // runs, once maintenanceMode is off again.
+        renderLogin();
+        return;
+      }
       const enterOpts = { persist: false, expiresAt: persisted.expiresAt };
       if (haveFullState) {
         enterApp(m, enterOpts);
