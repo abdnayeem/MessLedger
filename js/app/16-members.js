@@ -138,7 +138,7 @@ function renderMembers() {
       <h2>Recovery Code</h2>
       <div class="small-note">Members use this code with "Forgot PIN?" to reset their own PIN. Share only with trusted people.</div>
       <div style="margin-top:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-        <span class="mono" style="font-size:20px; font-weight:700; background:#FAFAFB; border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px;">${state.recoveryCode}</span>
+        <span class="mono" style="font-size:20px; font-weight:700; background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px;">${state.recoveryCode}</span>
         <button class="btn secondary" onclick="regenerateRecoveryCode()">Generate New Code</button>
       </div>
     </div>`;

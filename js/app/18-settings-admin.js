@@ -22,7 +22,7 @@ function renderAdminMonthAccessCard() {
       specificYears: {}
     };
     html += `
-      <div style="border-bottom:1px solid #E5E7EB; padding:16px 0; margin:16px 0;">
+      <div style="border-bottom:1px solid var(--border); padding:16px 0; margin:16px 0;">
         <div style="font-weight:600; margin-bottom:12px; text-transform:capitalize;">${module}</div>
         <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -38,7 +38,7 @@ function renderAdminMonthAccessCard() {
             All Future Months
           </label>
         </div>
-        <div style="background:#F9FAFB; padding:12px; border-radius:6px; margin-top:12px;">
+        <div style="background:var(--surface-alt); padding:12px; border-radius:6px; margin-top:12px;">
           <div style="font-size:13px; font-weight:500; margin-bottom:8px;">Specific Months by Year</div>
           <div id="adminma-${module}-specific" style="display:flex; flex-direction:column; gap:8px;">
             ${Object.keys(cfg.specificYears || {}).map(year => {
@@ -171,10 +171,10 @@ function renderSettings() {
     ${renderAdminMonthAccessCard()}
     ${renderNotificationSettingsCard()}
     ${session.role === 'superadmin' ? `
-    <div class="card" style="border:1px solid #d33; ">
-      <h2 style="color:#d33;">Danger Zone</h2>
+    <div class="card" style="border:1px solid var(--danger); ">
+      <h2 style="color:var(--danger);">Danger Zone</h2>
       <div class="small-note" style="margin-bottom:14px;">For use before a real release: permanently wipes all meals, deposits, expenses, grocery costs, login logs and notifications for every member — in one go, instead of deleting each record by hand. Members and settings are kept.</div>
-      <button class="btn" style="background:#d33; border-color:#d33;" onclick="resetTestData()">Reset All Test Data</button>
+      <button class="btn" style="background:var(--danger); border-color:var(--danger);" onclick="resetTestData()">Reset All Test Data</button>
       ${testDataBackupDaysLeft()!==null ? `
       <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border);">
         <div class="small-note" style="margin-bottom:10px;">A backup from the last reset (${state.testDataBackup.items.length} record(s)) is available to restore for ${testDataBackupDaysLeft()} more day${testDataBackupDaysLeft()===1?'':'s'}.</div>

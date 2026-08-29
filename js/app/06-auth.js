@@ -74,8 +74,32 @@ async function enterAppWithFullData(m, opts) {
 /* ---------------- LOGIN ---------------- */
 function hideBootLoader() {
   const el = document.getElementById('boot-loader');
+  if (_bootSkeletonTimer) { clearTimeout(_bootSkeletonTimer); _bootSkeletonTimer = null; }
   if (el) el.remove();
 }
+
+// Fades in the shimmering skeleton preview inside #boot-loader (see the
+// .bl-skeleton/.skel-block CSS and markup in index.html) after a short
+// delay, instead of immediately — so a fast connection that clears the
+// loader in well under a second never even flashes the skeleton, and only
+// a load that's genuinely taking a moment shows shaped placeholders under
+// the spinner instead of a blank gap. Called once for the initial static
+// loader (below) and again each time showBootLoader() (re)builds it.
+let _bootSkeletonTimer = null;
+function armBootSkeleton(el) {
+  if (!el) return;
+  if (_bootSkeletonTimer) clearTimeout(_bootSkeletonTimer);
+  el.classList.remove('bl-show-skeleton');
+  _bootSkeletonTimer = setTimeout(() => {
+    const stillEl = document.getElementById('boot-loader');
+    if (stillEl) stillEl.classList.add('bl-show-skeleton');
+    _bootSkeletonTimer = null;
+  }, 350);
+}
+// Arms it for the initial boot-loader markup already sitting in index.html
+// (present before this script even runs, since <script defer> executes
+// after the DOM is parsed).
+armBootSkeleton(document.getElementById('boot-loader'));
 
 // Shows (or updates, if already showing) the same branded full-screen
 // loader used for the very first page load — see index.html's initial
@@ -118,8 +142,15 @@ function showBootLoader(message) {
       <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><img src="favicon.png" alt="" width="100" height="100"></div></div>
       <div class="bl-brand">MessLedger</div>
       <div class="bl-txt">${message}</div>
+      <div class="bl-skeleton">
+        <div class="skel-block bl-skel-card"></div>
+        <div class="skel-block bl-skel-row"></div>
+        <div class="skel-block bl-skel-row short"></div>
+        <div class="skel-block bl-skel-row"></div>
+      </div>
     </div>`;
   el.style.display = 'flex';
+  armBootSkeleton(el);
 }
 
 function normalizePhone(p) {
@@ -530,15 +561,15 @@ function injectForcedPinStyles() {
   style.textContent = `
     #forced-pin-overlay{position:fixed; inset:0; z-index:99999; display:none; align-items:center; justify-content:center; padding:16px;}
     #forced-pin-overlay .forced-pin-backdrop{position:absolute; inset:0; background:rgba(15,23,42,0.72); backdrop-filter:blur(2px);}
-    #forced-pin-overlay .forced-pin-modal{position:relative; width:100%; max-width:400px; background:var(--card-bg,#fff); color:var(--text,#0f172a); border-radius:16px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:forcedPinPop .25s ease-out;}
+    #forced-pin-overlay .forced-pin-modal{position:relative; width:100%; max-width:400px; background:var(--surface); color:var(--ink); border-radius:16px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:forcedPinPop .25s ease-out;}
     @keyframes forcedPinPop{ from{opacity:0; transform:translateY(12px) scale(.97);} to{opacity:1; transform:translateY(0) scale(1);} }
     #forced-pin-overlay .forced-pin-icon{font-size:32px; text-align:center; margin-bottom:6px;}
     #forced-pin-overlay h2{font-size:19px; text-align:center; margin:0 0 8px;}
     #forced-pin-overlay .forced-pin-msg{font-size:13.5px; text-align:center; opacity:0.8; margin:0 0 20px; line-height:1.45;}
     #forced-pin-overlay .forced-pin-field{margin-bottom:14px;}
     #forced-pin-overlay .forced-pin-field label{display:block; font-size:12.5px; font-weight:600; margin-bottom:5px; opacity:0.85;}
-    #forced-pin-overlay .forced-pin-field input{width:100%; box-sizing:border-box; padding:11px 12px; border-radius:9px; border:1px solid var(--border,#d8dee9); font-size:15px; background:var(--input-bg,#fff); color:inherit; transition:border-color .15s, box-shadow .15s;}
-    #forced-pin-overlay .forced-pin-field input:focus{outline:none; border-color:var(--accent,#4f46e5); box-shadow:0 0 0 3px rgba(79,70,229,0.15);}
+    #forced-pin-overlay .forced-pin-field input{width:100%; box-sizing:border-box; padding:11px 12px; border-radius:9px; border:1px solid var(--border); font-size:15px; background:var(--surface-alt); color:inherit; transition:border-color .15s, box-shadow .15s;}
+    #forced-pin-overlay .forced-pin-field input:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-bg);}
     #forced-pin-overlay #fpin-error{min-height:18px; margin-bottom:10px;}
     #forced-pin-overlay #fpin-submit{width:100%; text-align:center;}
     body.forced-pin-lock #main-screen{filter:blur(2px); pointer-events:none; user-select:none;}

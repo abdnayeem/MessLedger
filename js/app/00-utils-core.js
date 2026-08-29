@@ -143,6 +143,31 @@ window.showCacheStats = function () {
   return _calcStats;
 };
 
+/* ---------------- THEME (dark mode) ----------------
+   Persisted in localStorage; the <html data-theme="dark"> attribute drives
+   every color in the app since css/style.css reads colors through
+   var(--...) tokens (see section 1b there). The inline THEME INIT script
+   in index.html already applies the saved/OS preference before first
+   paint — this function only handles the in-app toggle + save. */
+const THEME_KEY = 'messledger-theme';
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+function toggleTheme() {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  if (next === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch (e) {}
+  // Re-render the profile menu so its own "Dark/Light Mode" label + icon
+  // flip immediately instead of only on the next unrelated re-render.
+  if (typeof renderTopWho === 'function' && session && session.userId) renderTopWho();
+}
+
 /* ---------------- TOAST ---------------- */
 function showToast(message, type) {
   type = type || 'success';
@@ -165,6 +190,74 @@ function showToast(message, type) {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 250);
   }, life);
+}
+
+/* ---------------- UNDO TOAST ----------------
+   Same visual family as showToast(), but stays up longer, shows an "Undo"
+   button, and defers the actual destructive action instead of firing it
+   immediately. Used for low-stakes deletes (grocery cost / shared expense /
+   deposit records) where a confirm() dialog on every delete was more
+   friction than protection — the record is removed from local state (and
+   thus the UI) right away for a snappy feel, and only actually deleted on
+   the server once the toast times out without being undone.
+   NOT used for high-stakes actions (member removal, PIN reset, bulk log
+   wipes) — those keep an explicit confirm(), since those aren't easily
+   reversible the same way and deserve a harder stop.
+   onUndo(): called if the user clicks Undo before the timer runs out —
+     restore the record to local state and re-render. The server-side
+     delete never happens in this case.
+   onCommit(): called once the timer elapses without an undo — this is
+     where the actual Firestore delete should be fired. */
+function showUndoToast(message, onUndo, onCommit) {
+  const container = document.getElementById('toast-container');
+  if (!container) {
+    onCommit();
+    return;
+  }
+  const UNDO_WINDOW_MS = 5000;
+  let settled = false;
+
+  const el = document.createElement('div');
+  el.className = 'toast toast-success toast-undo';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'toast-undo-msg';
+  msgSpan.textContent = message;
+
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'toast-undo-btn';
+  undoBtn.textContent = 'Undo';
+
+  el.appendChild(msgSpan);
+  el.appendChild(undoBtn);
+  container.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const life = prefersReduced ? UNDO_WINDOW_MS * 1.5 : UNDO_WINDOW_MS;
+
+  const dismiss = () => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  };
+
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    dismiss();
+    onCommit();
+  }, life);
+
+  undoBtn.addEventListener('click', () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    dismiss();
+    onUndo();
+  });
 }
 
 /* ---------------- SUCCESS CHECK (iPhone-payment-style confirmation) ----------------

@@ -12,14 +12,14 @@ function injectDetailsModalStyles() {
   style.textContent = `
     #details-modal-overlay{position:fixed; inset:0; z-index:9998; display:none; align-items:center; justify-content:center; padding:16px;}
     #details-modal-overlay .details-modal-backdrop{position:absolute; inset:0; background:rgba(15,23,42,0.55); backdrop-filter:blur(1.5px);}
-    #details-modal-overlay .details-modal-box{position:relative; width:100%; max-width:460px; max-height:82vh; overflow-y:auto; background:var(--card-bg,#fff); color:var(--ink,#0f172a); border-radius:14px; padding:22px 22px 18px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:detailsModalPop .16s ease-out;}
+    #details-modal-overlay .details-modal-box{position:relative; width:100%; max-width:460px; max-height:82vh; overflow-y:auto; background:var(--surface); color:var(--ink); border-radius:14px; padding:22px 22px 18px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:detailsModalPop .16s ease-out;}
     @keyframes detailsModalPop{ from{opacity:0; transform:translateY(10px) scale(.98);} to{opacity:1; transform:translateY(0) scale(1);} }
-    #details-modal-overlay .details-modal-close{position:absolute; top:12px; right:12px; background:none; border:none; font-size:20px; line-height:1; cursor:pointer; color:var(--ink,#0f172a); opacity:0.5; padding:6px;}
+    #details-modal-overlay .details-modal-close{position:absolute; top:12px; right:12px; background:none; border:none; font-size:20px; line-height:1; cursor:pointer; color:var(--ink); opacity:0.5; padding:6px;}
     #details-modal-overlay .details-modal-close:hover{opacity:1;}
     #details-modal-overlay h3{margin:0 26px 14px 0; font-size:17px;}
-    #details-modal-overlay .detail-row{display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:1px dashed var(--border,#e5e7eb); font-size:13.5px; line-height:1.4;}
+    #details-modal-overlay .detail-row{display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:1px dashed var(--border); font-size:13.5px; line-height:1.4;}
     #details-modal-overlay .detail-row:last-child{border-bottom:none;}
-    #details-modal-overlay .detail-label{color:var(--muted,#6b7280); flex-shrink:0; padding-top:1px;}
+    #details-modal-overlay .detail-label{color:var(--ink-faint); flex-shrink:0; padding-top:1px;}
     #details-modal-overlay .detail-value{text-align:right; font-weight:600; word-break:break-word;}
   `;
   document.head.appendChild(style);
@@ -65,42 +65,22 @@ function detailRow(label, valueHtml) {
 // still shows in that record's View Details modal via expenseMethodLabel()).
 function expenseMethodBadge(splitType, mealTypeSplit, isEveryoneFallback) {
   const isSelected = splitType === 'selected' || (!splitType && !isEveryoneFallback);
-  if (splitType === 'meal') return `<span style="display:inline-block; background:#FEF3C7; border:1px solid #FDE68A; color:#92400E; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap;">🟠 Meal Count</span>`;
-  if (isSelected) return `<span style="display:inline-block; background:#DBEAFE; border:1px solid #BFDBFE; color:#1E40AF; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap;">🔵 Specific Members</span>`;
-  return `<span style="display:inline-block; background:#D1FAE5; border:1px solid #A7F3D0; color:#065F46; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap;">🟢 Split Equally</span>`;
+  if (splitType === 'meal') return `<span class="method-badge method-badge-amber">🟠 Meal Count</span>`;
+  if (isSelected) return `<span class="method-badge method-badge-blue">🔵 Specific Members</span>`;
+  return `<span class="method-badge method-badge-green">🟢 Split Equally</span>`;
 }
 // Compact meal badge — Lunch / Dinner / Both / Other — used for grocery
 // cost's meal, and for a shared expense's meal when it's a meal-count split.
 const MEAL_BADGE_STYLE = {
-  lunch: {
-    bg: '#FEF3C7',
-    border: '#FDE68A',
-    color: '#92400E',
-    label: 'Lunch'
-  },
-  dinner: {
-    bg: '#E0E7FF',
-    border: '#C7D2FE',
-    color: '#3730A3',
-    label: 'Dinner'
-  },
-  both: {
-    bg: '#F3E8FF',
-    border: '#E9D5FF',
-    color: '#6B21A8',
-    label: 'Both'
-  },
-  other: {
-    bg: '#F1F5F9',
-    border: '#E2E8F0',
-    color: '#475569',
-    label: 'Other/Grocery'
-  }
+  lunch:  { cls: 'meal-badge-amber',  label: 'Lunch' },
+  dinner: { cls: 'meal-badge-indigo', label: 'Dinner' },
+  both:   { cls: 'meal-badge-purple', label: 'Both' },
+  other:  { cls: 'meal-badge-slate',  label: 'Other/Grocery' }
 };
 
 function mealBadge(mealType) {
   const c = MEAL_BADGE_STYLE[mealType] || MEAL_BADGE_STYLE.other;
-  return `<span style="display:inline-block; background:${c.bg}; border:1px solid ${c.border}; color:${c.color}; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap;">${c.label}</span>`;
+  return `<span class="meal-badge ${c.cls}">${c.label}</span>`;
 }
 // Truncates for a single-line, fixed-height table cell; full text always
 // available via the title="" tooltip and in View Details.
@@ -409,8 +389,8 @@ function renderHistory() {
         </div>
         <div class="hist-section-tools">
           ${(session.role === 'admin' || session.role === 'superadmin') ? `
-          <button type="button" class="btn secondary" style="margin-top:0; color:var(--success); border-color:#C8ECD6;" onclick="goHistoryAddDeposit('deposit')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Deposit</button>
-          <button type="button" class="btn secondary" style="margin-top:0; color:var(--danger); border-color:#F2C7C2;" onclick="goHistoryAddDeposit('withdrawal')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Withdrawal</button>
+          <button type="button" class="btn secondary" style="margin-top:0; color:var(--success); border-color:var(--success);" onclick="goHistoryAddDeposit('deposit')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Deposit</button>
+          <button type="button" class="btn secondary" style="margin-top:0; color:var(--danger); border-color:var(--danger);" onclick="goHistoryAddDeposit('withdrawal')"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Withdrawal</button>
           ` : ''}
         </div>
       </div>

@@ -3,7 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, viewport-fit=cover">
-<meta name="theme-color" content="#2E5DE8">
+<meta name="theme-color" content="#2E5DE8" id="theme-color-meta">
+<script>
+  // THEME INIT — runs synchronously, before any CSS or the boot loader
+  // paints, so the correct theme is on <html> from the very first frame
+  // (no light-flash before a dark switch kicks in, and vice versa).
+  // Preference source, in order: explicit user choice saved in
+  // localStorage, else the OS-level prefers-color-scheme, else light.
+  (function () {
+    try {
+      var saved = localStorage.getItem('messledger-theme');
+      var theme = saved === 'dark' || saved === 'light'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+  })();
+</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,6 +38,12 @@
      exactly the "5 seconds of white screen" being seen. */
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   html,body{background:#F6F7F4; margin:0; width:100%; overflow-x:hidden;}
+  /* Dark-theme critical override — kept minimal (just the boot screen's
+     own hard-coded colors), since data-theme is already on <html> by the
+     time this runs (see the THEME INIT script above), avoiding a light
+     flash before css/style.css finishes loading. */
+  html[data-theme="dark"],html[data-theme="dark"] body{background:#000000;}
+  html[data-theme="dark"] #boot-loader{background:#000000;}
 
   /* ===== MessLedger boot / loading screen =====
      One signature texture (a fine dot grid) instead of several stacked
@@ -82,8 +104,37 @@
   @keyframes boot-spin{to{transform:rotate(360deg);}}
   @keyframes bl-fade-in{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
   @keyframes bl-glow-breathe{0%,100%{opacity:.7; transform:scale(1);} 50%{opacity:1; transform:scale(1.06);}}
+
+  /* ===== Skeleton / shimmer placeholders =====
+     Shown UNDER the brand mark on #boot-loader. The .bl-show-skeleton
+     class is added by armBootSkeleton() (06-auth.js) ~350ms after the
+     loader appears — never immediately — so a fast connection never even
+     flashes it; only a load that's actually taking a moment shows shaped,
+     shimmering placeholders instead of a blank gap under the spinner. */
+  .skel-block{
+    position:relative; overflow:hidden; border-radius:10px;
+    background:#ECEEF3;
+  }
+  .skel-block::after{
+    content:''; position:absolute; inset:0; transform:translateX(-100%);
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+    animation:skel-shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes skel-shimmer{100%{transform:translateX(100%);}}
+
+  #boot-loader .bl-skeleton{
+    width:min(320px, 82vw); margin-top:26px;
+    display:flex; flex-direction:column; gap:10px;
+    opacity:0; transition:opacity .25s ease;
+  }
+  #boot-loader.bl-show-skeleton .bl-skeleton{opacity:1;}
+  #boot-loader .bl-skel-card{height:64px; border-radius:14px;}
+  #boot-loader .bl-skel-row{height:15px; width:100%;}
+  #boot-loader .bl-skel-row.short{width:62%;}
+
   @media (prefers-reduced-motion:reduce){
     #boot-loader *{animation-duration:.001ms !important; animation-iteration-count:1 !important;}
+    .skel-block::after{animation:none; display:none;}
   }
 </style>
 </head>
@@ -95,6 +146,16 @@
     <div class="bl-ring-wrap"><div class="bl-ring-track"></div><div class="bl-ring"></div><div class="bl-logo"><img src="favicon.png" alt="" width="100" height="100"></div></div>
     <div class="bl-brand">MessLedger</div>
     <div class="bl-txt">Loading MessLedger…</div>
+    <!-- Skeleton preview of the dashboard about to load — fades in only if
+         the fetch is slow enough to actually be seen (see .bl-skeleton
+         transition-delay above), so the blank/spinner-only gap on a slow
+         connection now shows shaped, shimmering placeholders instead. -->
+    <div class="bl-skeleton">
+      <div class="skel-block bl-skel-card"></div>
+      <div class="skel-block bl-skel-row"></div>
+      <div class="skel-block bl-skel-row short"></div>
+      <div class="skel-block bl-skel-row"></div>
+    </div>
   </div>
 </div>
 <div id="app">

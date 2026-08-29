@@ -1160,14 +1160,20 @@ async function deleteExpense(id) {
     return;
   }
   if (!guardAdminMonthAccess(rec.date.slice(0, 7), 'expenses')) return;
-  // BUGFIX (same as deleteCost() in 13-costs.js): show which record this
-  // actually is — date/title/amount — instead of a generic message, so a
-  // superadmin can't accidentally confirm deleting the wrong row.
-  if (!confirm(`Delete this shared expense?\n\n${rec.date} · "${rec.title || ''}" · ${fmtMoney(rec.amount)}\n\nThis cannot be undone.`)) return;
+  // UNDO TOAST (same pattern as deleteCost() in 13-costs.js): the record
+  // disappears from the list immediately, but the actual Firestore delete
+  // (deleteExpenseDoc) is deferred until the toast's undo window runs out.
+  const idx = state.expenses.findIndex(e => e.id === id);
   state.expenses = state.expenses.filter(e => e.id !== id);
   renderTabContent();
-  showToast('Shared expense deleted.', 'success');
-  deleteExpenseDoc(id);
+  showUndoToast(
+    `Deleted: ${rec.date} · "${rec.title || ''}" · ${fmtMoney(rec.amount)}`,
+    () => {
+      state.expenses.splice(idx, 0, rec);
+      renderTabContent();
+    },
+    () => deleteExpenseDoc(id)
+  );
 }
 
 /* ---------------- BALANCES / DEPOSITS ---------------- */

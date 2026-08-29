@@ -161,19 +161,19 @@ function injectMarketCompletionStyles() {
   style.textContent = `
     #market-completion-overlay{position:fixed; inset:0; z-index:9998; display:none; align-items:center; justify-content:center; padding:16px;}
     #market-completion-overlay .mc-backdrop{position:absolute; inset:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(2px);}
-    #market-completion-overlay .mc-modal{position:relative; width:100%; max-width:400px; background:var(--card-bg,#fff); color:var(--text,#0f172a); border-radius:16px; padding:26px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:mcModalPop .25s ease-out;}
+    #market-completion-overlay .mc-modal{position:relative; width:100%; max-width:400px; background:var(--surface); color:var(--ink); border-radius:16px; padding:26px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:mcModalPop .25s ease-out;}
     @keyframes mcModalPop{ from{opacity:0; transform:translateY(12px) scale(.97);} to{opacity:1; transform:translateY(0) scale(1);} }
     #market-completion-overlay .mc-icon{font-size:30px; text-align:center; margin-bottom:6px;}
     #market-completion-overlay h2{font-size:18px; text-align:center; margin:0 0 14px;}
-    #market-completion-overlay .mc-row{display:flex; justify-content:space-between; gap:10px; font-size:13.5px; padding:8px 0; border-bottom:1px solid var(--border,#e5e7eb);}
+    #market-completion-overlay .mc-row{display:flex; justify-content:space-between; gap:10px; font-size:13.5px; padding:8px 0; border-bottom:1px solid var(--border);}
     #market-completion-overlay .mc-row:last-of-type{border-bottom:none;}
     #market-completion-overlay .mc-row .mc-label{opacity:0.65; font-weight:600;}
     #market-completion-overlay .mc-row .mc-value{text-align:right; font-weight:600;}
-    #market-completion-overlay .mc-items-box{margin-top:6px; margin-bottom:18px; font-size:13px; background:var(--input-bg,#f8fafc); border-radius:9px; padding:10px 12px; line-height:1.5;}
+    #market-completion-overlay .mc-items-box{margin-top:6px; margin-bottom:18px; font-size:13px; background:var(--surface-alt); border-radius:9px; padding:10px 12px; line-height:1.5;}
     #market-completion-overlay .mc-btns{display:flex; flex-direction:column; gap:9px; margin-top:18px;}
     #market-completion-overlay .mc-btn-primary{width:100%; text-align:center;}
-    #market-completion-overlay .mc-btn-later{width:100%; text-align:center; background:transparent; border:1px solid var(--border,#d8dee9); color:inherit; border-radius:9px; padding:10px; font-size:14px; cursor:pointer; font-family:inherit;}
-    #market-completion-overlay .mc-btn-later:hover{background:var(--input-bg,#f1f5f9);}
+    #market-completion-overlay .mc-btn-later{width:100%; text-align:center; background:transparent; border:1px solid var(--border); color:inherit; border-radius:9px; padding:10px; font-size:14px; cursor:pointer; font-family:inherit;}
+    #market-completion-overlay .mc-btn-later:hover{background:var(--surface-alt);}
   `;
   document.head.appendChild(style);
 }
@@ -364,7 +364,7 @@ function renderDashboard() {
         </div>`).join('') : `<div class="small-note" style="padding:5px 0;">Nothing bought for groceries on this day yet.</div>`;
   const sharedRows = dayCost.expenseItems.length ? dayCost.expenseItems.map(e => `
         <div style="display:flex; justify-content:space-between; align-items:baseline; padding:5px 0; gap:10px;">
-          <span><b>${e.title}</b>${e.description ? `<span class="small-note" style="margin:0;"> — ${e.description}</span>` : ''}</span>
+          <span>${e.splitType==='meal' ? `<span style="margin-right:6px; display:inline-block;">${mealBadge(e.mealTypeSplit||'both')}</span>` : ''}<b>${e.title}</b>${e.description ? `<span class="small-note" style="margin:0;"> — ${e.description}</span>` : ''}</span>
           <span class="mono">${fmtMoney(e.amount)}</span>
         </div>`).join('') : `<div class="small-note" style="padding:5px 0;">No shared expenses added on this day yet.</div>`;
   const totalExpenseCard = `
@@ -409,13 +409,13 @@ function renderDashboard() {
   let marketBox = '';
   if (todayDuty.length) {
     const t = dayMealTotals(todayStr());
-    marketBox = `<div class="card" style="background:var(--success-bg); border-color:#C8ECD6;">
+    marketBox = `<div class="card" style="background:var(--success-bg); border-color:var(--success);">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div><b style="color:var(--success);">🛒 Market duty today:</b> ${todayDuty.map(x=>`${x.member.name} (${shiftLabel(x.member.marketShift)})`).join(', ')}</div>
         <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
       </div>
       ${todayDuty.filter(x=>x.member.marketItems).map(x=>`<div class="small-note" style="margin-top:4px;">🧺 <b>${x.member.name}</b>'s items: ${x.member.marketItems}</div>`).join('')}
-      <div class="small-note" style="margin-top:8px; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:7px 10px; color:#92400E; font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total).</div>
+      <div class="small-note" style="margin-top:8px; background:var(--warning-bg); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:7px 10px; color:var(--warning); font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total).</div>
     </div>`;
   } else if (upcomingDuty.length) {
     // Show everyone whose duty falls on that same nearest date (e.g. one
@@ -425,7 +425,7 @@ function renderDashboard() {
     const nextGroup = upcomingDuty.filter(x => x.info.daysLeft === nearestDays);
     const names = nextGroup.map(x => `<b>${x.member.name}</b> (${shiftLabel(x.member.marketShift)})`).join(', ');
     const g = nextGroup[0].info;
-    marketBox = `<div class="card" style="background:var(--warning-bg); border-color:#FCE3B0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+    marketBox = `<div class="card" style="background:var(--warning-bg); border-color:var(--warning); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <div>🛒 Next market duty: ${names} — ${WEEKDAYS[nextGroup[0].member.marketDay]} (${formatCountdown(g.remDays, g.remHours, g.remMinutes)} left)</div>
       <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
     </div>`;

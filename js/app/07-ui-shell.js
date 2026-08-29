@@ -7,22 +7,24 @@ function renderTopWho() {
   const bal = myTotalBalance();
   let balColor = 'var(--success)',
     balBg = 'var(--success-bg)',
-    balBorder = '#C8ECD6';
+    balBorder = 'var(--success)';
   if (bal < 0) {
     balColor = 'var(--danger)';
     balBg = 'var(--danger-bg)';
-    balBorder = '#FBD5D5';
+    balBorder = 'var(--danger)';
   } else if (bal < state.settings.lowBalanceWarn) {
     balColor = 'var(--warning)';
     balBg = 'var(--warning-bg)';
-    balBorder = '#FCE3B0';
+    balBorder = 'var(--warning)';
   }
   const balText = bal >= 0 ? `৳${Math.round(bal).toLocaleString('en-US')}` : `-৳${Math.round(Math.abs(bal)).toLocaleString('en-US')}`;
   checkLowBalanceNotification(session.userId, bal);
   const initial = m ? m.name.trim().charAt(0).toUpperCase() : '?';
+  const isDark = currentTheme() === 'dark';
   const topMenuHtml = !topProfileMenuOpen ? '' : `
     <div class="header-profile-menu">
       <button type="button" onclick="changeMyPin()"><i class="fas fa-key"></i> Change PIN</button>
+      <button type="button" onclick="toggleTheme()"><i class="fas fa-${isDark?'sun':'moon'}"></i> ${isDark?'Light Mode':'Dark Mode'}</button>
       <button type="button" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Log Out</button>
     </div>`;
   document.getElementById('who-box').innerHTML = `

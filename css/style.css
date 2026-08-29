@@ -26,6 +26,12 @@
 
 /* ---------- 1. Design tokens ---------- */
 :root{
+  color-scheme:light; /* tells the browser to render its OWN chrome —
+    checkbox/radio boxes, select dropdown arrows, date-picker popovers —
+    in a light style. Without this, browser-drawn controls stay light
+    even when data-theme="dark" is set below, since color-scheme is the
+    only signal that reaches native form-control rendering (no CSS
+    selector can restyle a checkbox's own box directly). */
   --bg:#F5F7FA;
   --surface:#FFFFFF;
   --surface-alt:#EBEFF3;
@@ -85,7 +91,93 @@
   --nav-h:56px; /* bottom nav height on phones */
   --safe-b:env(safe-area-inset-bottom, 0px);
   --safe-t:env(safe-area-inset-top, 0px);
+
+  /* Pale accent-tint borders — used all over the app for subtle hover/
+     active/status-badge borders (e.g. a faint blue ring on hover, a faint
+     green ring on a success alert card). These need their OWN tokens
+     separate from --primary/--success/etc. because their light-mode value
+     is a deliberately pale tint, not the full-strength accent color — a
+     straight swap to var(--success) etc. would make every one of these
+     hairlines render as a bold solid line in light mode too. Dark mode
+     gets a translucent version of the real accent instead of a literal
+     pale hex, so it still reads as a hairline against a dark surface. */
+  --border-primary-tint:#C9DCE8;
+  --border-success-tint:#C8ECD6;
+  --border-danger-tint:#F2C7C2;
+  --border-warning-tint:#F3DFAF;
+  --border-purple-tint:#DDD3FB;
+  --border-blue-tint:#C9D9F7;
 }
+
+/* ---------- 1b. Dark theme ---------- */
+/* Toggled by adding data-theme="dark" to <html> (see toggleTheme() in
+   00-utils-core.js and the THEME INIT inline script in index.html, which
+   sets this attribute before first paint to avoid a light-mode flash).
+   Overrides only the design tokens above — every rule in this file reads
+   colors through var(--...), so nothing else needs to change.
+   Colors below are Apple's own iOS/iPadOS system dark-mode palette (Human
+   Interface Guidelines), not an approximation: systemGroupedBackground /
+   secondarySystemGroupedBackground for the base/card levels, label /
+   secondaryLabel / tertiaryLabel for text, separator for hairlines, and
+   the systemBlue/Green/Red/Orange/Purple dark-variant accents. iOS cards
+   communicate elevation through this background-level contrast rather
+   than shadow, so shadows are dropped to near-nothing here (a hairline
+   border does the separation instead) — a strong drop shadow is the
+   single biggest tell that a "dark mode" wasn't actually modeled on iOS. */
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000000;                 /* systemGroupedBackground (dark) */
+  --surface:#1C1C1E;            /* secondarySystemGroupedBackground — cards */
+  --surface-alt:#2C2C2E;        /* tertiarySystemGroupedBackground — nested/alt surfaces */
+  --ink:#FFFFFF;                /* label */
+  --ink-soft:rgba(235,235,245,.6);   /* secondaryLabel */
+  --ink-faint:rgba(235,235,245,.3);  /* tertiaryLabel */
+  --border:rgba(84,84,88,.65);  /* separator */
+
+  --primary:#0A84FF;            /* systemBlue (dark) */
+  --primary-dark:#409CFF;       /* systemBlue, hover/pressed step */
+  --primary-bg:rgba(10,132,255,.16);
+
+  --accent:#FF6961;             /* systemRed-leaning accent — keeps the app's
+                                    "urgent/right now" coral identity but
+                                    pulled onto iOS's own red rather than a
+                                    custom hue */
+  --accent-dark:#FF8079;
+  --accent-bg:rgba(255,105,97,.16);
+
+  --success:#30D158;            /* systemGreen (dark) */
+  --success-bg:rgba(48,209,88,.16);
+  --danger:#FF453A;             /* systemRed (dark) */
+  --danger-bg:rgba(255,69,58,.16);
+  --warning:#FFD60A;            /* systemYellow (dark) */
+  --warning-bg:rgba(255,214,10,.16);
+
+  --meals-blue:#0A84FF;
+  --meals-blue-bg:rgba(10,132,255,.16);
+  --meals-amber:#FF9F0A;        /* systemOrange (dark) */
+  --meals-amber-bg:rgba(255,159,10,.16);
+  --meals-purple:#BF5AF2;       /* systemPurple (dark) */
+  --meals-purple-bg:rgba(191,90,242,.16);
+  --meals-purple-soft:#DA8FFF;
+
+  --shadow-sm:none;
+  --shadow-md:0 2px 10px rgba(0,0,0,.4);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.5);
+  --shadow-focus:0 0 0 4px rgba(10,132,255,.22);
+
+  --border-primary-tint:rgba(10,132,255,.35);
+  --border-success-tint:rgba(48,209,88,.35);
+  --border-danger-tint:rgba(255,69,58,.35);
+  --border-warning-tint:rgba(255,214,10,.35);
+  --border-purple-tint:rgba(191,90,242,.35);
+  --border-blue-tint:rgba(10,132,255,.35);
+}
+/* A handful of places set colors as plain hex instead of var(--...) —
+   balance-pill inline styles (success/danger/warning already covered
+   above since those ARE the tokens) and a few chart/status dots. Anything
+
+   missed here is a light->dark polish item, not a functional bug: text
+   stays readable, it just won't perfectly match the palette yet. */
 
 /* Respect OS-level reduced-motion: collapse every transition/animation
    in this file to near-instant instead of turning them off unevenly. */
@@ -219,8 +311,8 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
 .btn.secondary:hover{background:var(--surface-alt); box-shadow:none; transform:none;}
 .btn.danger{background:var(--danger); border-color:var(--danger); color:#fff; box-shadow:0 2px 6px rgba(194,58,58,.25);}
 .btn.danger:hover{background:#9E2E2E; box-shadow:0 4px 12px rgba(194,58,58,.28);}
-.btn.active-toggle{background:var(--ink); color:#fff; border-color:var(--ink); box-shadow:none;}
-.btn.active-toggle:hover{background:#263241; color:#fff; border-color:#263241; box-shadow:none; transform:none;}
+.btn.active-toggle{background:var(--primary); color:#fff; border-color:var(--primary); box-shadow:none;}
+.btn.active-toggle:hover{background:var(--primary-dark); color:#fff; border-color:var(--primary-dark); box-shadow:none; transform:none;}
 .hint{font-size:12px; color:var(--ink-faint); margin-top:18px; line-height:1.6; border-top:1px solid var(--border); padding-top:14px;}
 .error-text{color:var(--danger); font-size:13px; margin-top:8px; min-height:16px;}
 
@@ -257,7 +349,7 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
                     clipped icons/text instead of the row just staying
                     full size. */
   margin:calc(10px + var(--safe-t)) 0 14px;
-  background:#fff; border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-sm);
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-sm);
   /* No backdrop-filter here on purpose — it silently turns this card into
      a "containing block" for any position:fixed descendant (the mobile
      notification panel is one), so that descendant ends up positioned
@@ -322,8 +414,8 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
   transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
   min-height:0; max-width:180px;
 }
-.header-profile-btn:hover{background:var(--surface-alt); border-color:#C9D4E8;}
-.header-profile-btn.is-open{background:var(--meals-blue-bg); border-color:#C9D6FA; box-shadow:0 0 0 4px rgba(46,93,232,.08);}
+.header-profile-btn:hover{background:var(--surface-alt); border-color:var(--border-primary-tint);}
+.header-profile-btn.is-open{background:var(--meals-blue-bg); border-color:var(--border-blue-tint); box-shadow:0 0 0 4px rgba(46,93,232,.08);}
 .header-profile-avatar{
   flex-shrink:0; width:26px; height:26px; border-radius:50%;
   background:var(--meals-blue); color:#fff; font-weight:800; font-size:11.5px;
@@ -656,9 +748,9 @@ body.more-sheet-locked{overflow:hidden;}
 .card-header-row h2{margin-bottom:0;}
 
 .alert-card{border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; border:1px solid; border-left-width:4px;}
-.alert-card.danger{background:var(--danger-bg); border-color:#F2C7C2; border-left-color:var(--danger);}
-.alert-card.warning{background:var(--warning-bg); border-color:#F3DFAF; border-left-color:var(--warning);}
-.alert-card.success{background:var(--success-bg); border-color:#C9DCE8; border-left-color:var(--success);}
+.alert-card.danger{background:var(--danger-bg); border-color:var(--border-danger-tint); border-left-color:var(--danger);}
+.alert-card.warning{background:var(--warning-bg); border-color:var(--border-warning-tint); border-left-color:var(--warning);}
+.alert-card.success{background:var(--success-bg); border-color:var(--border-primary-tint); border-left-color:var(--success);}
 .alert-card b{font-size:14px;}
 
 /* Monthly Active Members: one compact row per member (name + role left,
@@ -774,7 +866,7 @@ tbody tr:hover{background:var(--surface-alt);}
     padding:7px 13px; font-size:11px; font-weight:700; text-transform:none;
   }
   .content-wrap .card:not(.keep-native-tables) table:has(.sortable-th) thead th.sortable-th{cursor:pointer;}
-  .content-wrap .card:not(.keep-native-tables) table:has(.sortable-th) thead th.sortable-th:active{background:var(--primary-bg); border-color:#C9DCE8;}
+  .content-wrap .card:not(.keep-native-tables) table:has(.sortable-th) thead th.sortable-th:active{background:var(--primary-bg); border-color:var(--border-primary-tint);}
 }
 
 /* History: keep the exact table layout from desktop on mobile too — just
@@ -813,7 +905,7 @@ tbody tr:hover{background:var(--surface-alt);}
   display:flex; flex-direction:column; justify-content:center; gap:3px;
   transition:border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
-.stat-tile:hover{border-color:#C9DCE8; transform:translateY(-1px); box-shadow:var(--shadow-sm);}
+.stat-tile:hover{border-color:var(--border-primary-tint); transform:translateY(-1px); box-shadow:var(--shadow-sm);}
 .stat-tile i{color:var(--primary); font-size:12.5px;}
 .stat-tile-title{font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-faint);}
 .stat-tile-value{
@@ -893,7 +985,7 @@ tbody tr:hover{background:var(--surface-alt);}
   display:flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer;
 }
 .msched-filter-toggle-btn:hover{background:var(--surface-alt); color:var(--primary);}
-.msched-filter-toggle-btn.is-active{background:var(--meals-purple-bg); color:var(--meals-purple); border-color:#DDD3FB;}
+.msched-filter-toggle-btn.is-active{background:var(--meals-purple-bg); color:var(--meals-purple); border-color:var(--border-purple-tint);}
 @media (min-width:640px){
   .msched-header-actions{width:auto;}
   .msched-assign-btn{flex:0 0 auto;}
@@ -926,12 +1018,12 @@ tbody tr:hover{background:var(--surface-alt);}
   .msched-banner{height:100%; display:flex; flex-direction:column; justify-content:center;}
   .msched-banner .msched-shop-strip{margin-top:auto; margin-bottom:0;}
 }
-.msched-banner.is-today{background:var(--success-bg); border-color:#C8ECD6;}
-.msched-banner.is-next{background:var(--warning-bg); border-color:#FCE3B0;}
+.msched-banner.is-today{background:var(--success-bg); border-color:var(--success);}
+.msched-banner.is-next{background:var(--warning-bg); border-color:var(--warning);}
 .msched-banner.is-empty{background:var(--surface); border-color:var(--border);}
 .msched-banner-head{display:flex; align-items:center; gap:8px; font-size:14.5px; font-weight:700; margin-bottom:2px;}
 .msched-banner.is-today .msched-banner-head{color:var(--success);}
-.msched-banner.is-next .msched-banner-head{color:#8F5F16;}
+.msched-banner.is-next .msched-banner-head{color:var(--warning);}
 .msched-banner-sub{font-size:12px; color:var(--ink-soft); margin-bottom:10px;}
 .msched-duty-list{display:flex; flex-direction:column; gap:8px;}
 @media (min-width:640px){
@@ -957,28 +1049,28 @@ tbody tr:hover{background:var(--surface-alt);}
   flex-shrink:0; display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px;
   font-size:10.5px; font-weight:700; white-space:nowrap; border:1px solid transparent;
 }
-.msched-status-badge.ok{background:var(--success-bg); color:var(--success); border-color:#C8ECD6;}
-.msched-status-badge.overdue{background:var(--danger-bg); color:var(--danger); border-color:#F2C7C2;}
-.msched-status-badge.upcoming{background:var(--surface); color:var(--warning); border-color:#FCE3B0;}
+.msched-status-badge.ok{background:var(--success-bg); color:var(--success); border-color:var(--border-success-tint);}
+.msched-status-badge.overdue{background:var(--danger-bg); color:var(--danger); border-color:var(--border-danger-tint);}
+.msched-status-badge.upcoming{background:var(--surface); color:var(--warning); border-color:var(--border-warning-tint);}
 .msched-banner-icon{
   width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
   font-size:12px; flex-shrink:0;
 }
-.msched-banner-icon.today{background:rgba(255,255,255,.6); color:var(--success);}
+.msched-banner-icon.today{background:var(--surface); color:var(--success);}
 .msched-banner-icon.next{background:var(--accent-bg); color:var(--accent-dark);}
 .msched-status-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:5px; flex-shrink:0;}
 .msched-status-pill{
   display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px;
   font-size:10.5px; font-weight:700; white-space:nowrap; text-transform:uppercase; letter-spacing:.3px;
 }
-.msched-status-pill.today{background:var(--success-bg); color:var(--success); border:1px solid #C8ECD6;}
+.msched-status-pill.today{background:var(--success-bg); color:var(--success); border:1px solid var(--border-success-tint);}
 .msched-status-box{
   font-size:11px; font-weight:600; padding:4px 10px; border-radius:8px; border:1px solid var(--border);
   background:var(--surface); color:var(--ink-soft); white-space:nowrap; text-transform:uppercase; letter-spacing:.3px;
 }
-.msched-status-box.next{color:var(--warning); border-color:#FCE3B0;}
+.msched-status-box.next{color:var(--warning); border-color:var(--warning);}
 .msched-overdue-box{
-  background:var(--danger-bg); border:1px solid #F2C7C2; border-radius:10px; padding:6px 10px;
+  background:var(--danger-bg); border:1px solid var(--danger); border-radius:10px; padding:6px 10px;
   text-align:right; flex-shrink:0;
 }
 .msched-overdue-box .l1{
@@ -991,9 +1083,9 @@ tbody tr:hover{background:var(--surface-alt);}
   font-size:11px; font-weight:700; color:var(--ink-soft); display:inline-flex; align-items:center;
   gap:4px; flex-shrink:0;
 }
-.msched-items-label i{color:#D4A017;}
+.msched-items-label i{color:var(--warning);}
 .msched-item-chip{font-size:11px; background:var(--surface-alt); color:var(--ink-soft); border-radius:20px; padding:2px 9px;}
-.msched-banner.is-today .msched-item-chip{background:rgba(255,255,255,.7);}
+.msched-banner.is-today .msched-item-chip{background:rgba(255,255,255,.15); color:var(--ink);}
 .msched-next-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px;}
 .msched-cal-btn{
   align-self:flex-start; margin-top:0; min-height:0; padding:6px 12px; font-size:11.5px;
@@ -1003,11 +1095,11 @@ tbody tr:hover{background:var(--surface-alt);}
 .msched-cal-btn.right{align-self:flex-end;}
 .msched-shop-strip{
   margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
-  background:#FEF3C7; border:1px dashed #F59E0B; border-radius:var(--radius-sm); padding:9px 12px;
+  background:var(--warning-bg); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:9px 12px;
 }
-.msched-shop-strip-text{font-size:12.5px; color:#92400E; font-weight:600;}
+.msched-shop-strip-text{font-size:12.5px; color:var(--warning); font-weight:600;}
 .msched-shop-strip-text b{font-size:16px;}
-.msched-shop-strip-link{white-space:nowrap; font-size:12px; font-weight:700; color:#92400E;}
+.msched-shop-strip-link{white-space:nowrap; font-size:12px; font-weight:700; color:var(--warning);}
 .msched-shop-strip-link i{margin-left:4px;}
 
 /* ---- Quick Overview + Tips (aside) ---- */
@@ -1056,7 +1148,7 @@ tbody tr:hover{background:var(--surface-alt);}
   background:var(--surface); color:var(--ink-soft); border:1px solid var(--border); box-shadow:none;
 }
 .msched-icon-btn:hover{background:var(--surface-alt); color:var(--primary); box-shadow:none; transform:none;}
-.msched-icon-btn.is-active{background:var(--primary-bg); color:var(--primary); border-color:#C9DCE8;}
+.msched-icon-btn.is-active{background:var(--primary-bg); color:var(--primary); border-color:var(--border-primary-tint);}
 
 /* ---- Weekly schedule table (desktop) ---- */
 .msched-table-wrap{display:none;}
@@ -1065,8 +1157,8 @@ tbody tr:hover{background:var(--surface-alt);}
   color:var(--ink-soft); font-size:12px; display:inline-flex; align-items:center; justify-content:center;
   cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;
 }
-.msched-action-btn:hover{background:var(--surface-alt); color:var(--primary); border-color:#C9DCE8;}
-.msched-action-btn.danger:hover{background:var(--danger-bg); color:var(--danger); border-color:#F2C7C2;}
+.msched-action-btn:hover{background:var(--surface-alt); color:var(--primary); border-color:var(--border-primary-tint);}
+.msched-action-btn.danger:hover{background:var(--danger-bg); color:var(--danger); border-color:var(--border-danger-tint);}
 .msched-table-name{display:flex; align-items:center; gap:10px; min-width:0;}
 .msched-table-name .name-txt{font-weight:600; color:var(--ink); font-size:13.5px;}
 .msched-inline-edit{display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);}
@@ -1170,7 +1262,7 @@ tbody tr:hover{background:var(--surface-alt);}
   content:""; position:absolute; top:0; left:12px; right:12px; height:0;
   border-top:2px dashed #CBD3DA;
 }
-.summary-box:hover{border-color:#C9DCE8; box-shadow:0 2px 8px rgba(51,96,127,0.08);}
+.summary-box:hover{border-color:var(--border-primary-tint); box-shadow:0 2px 8px rgba(51,96,127,0.08);}
 .summary-box .label{font-size:0.6875rem; color:var(--ink-faint); font-weight:700; text-transform:uppercase; letter-spacing:.5px;}
 .summary-box .value{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums; font-size:19px; font-weight:700; margin-top:5px; letter-spacing:-.02em; word-break:break-word;}
 
@@ -1212,7 +1304,7 @@ tbody tr:hover{background:var(--surface-alt);}
 .meal-row-grid > :nth-child(3){grid-area:dinner;}
 .meal-row-grid > :nth-child(4){grid-area:total; align-self:center; justify-self:end;}
 .meal-row-grid > :nth-child(5){grid-area:quick;}
-.meal-row-grid.own{background:var(--primary-bg); border-color:#C9DCE8;}
+.meal-row-grid.own{background:var(--primary-bg); border-color:var(--border-primary-tint);}
 .meal-row-grid-head{display:none;} /* header row is desktop-only, see below */
 .mrg-name{font-weight:600; color:var(--ink); display:flex; flex-direction:column; align-items:flex-start;}
 .mrg-cell{display:flex; align-items:flex-end; justify-content:space-between; gap:10px;}
@@ -1245,7 +1337,7 @@ tbody tr:hover{background:var(--surface-alt);}
   color:var(--ink-soft); font-weight:700; font-size:12.5px; letter-spacing:.2px;
   cursor:pointer; transition:background .2s ease, border-color .2s ease, color .2s ease;
 }
-.member-stat-loadmore-btn:hover{background:var(--surface-alt); border-color:#C9DCE8; color:var(--primary-dark);}
+.member-stat-loadmore-btn:hover{background:var(--surface-alt); border-color:var(--border-primary-tint); color:var(--primary-dark);}
 
 @media (min-width:900px){
   .meal-grid-list{gap:0; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden;}
@@ -1322,10 +1414,10 @@ tbody tr:hover{background:var(--surface-alt);}
   flex-shrink:0; width:36px; height:36px; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
   font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px;
-  background:var(--primary-bg); color:var(--primary); border:1.5px solid #C9DCE8;
+  background:var(--primary-bg); color:var(--primary); border:1.5px solid var(--border-primary-tint);
 }
-.member-avatar.role-admin{background:var(--accent-bg); color:var(--accent-dark); border-color:#F0C4B5;}
-.member-avatar.role-superadmin{background:var(--danger-bg); color:var(--danger); border-color:#F0C4BE;}
+.member-avatar.role-admin{background:var(--accent-bg); color:var(--accent-dark); border-color:var(--border-danger-tint);}
+.member-avatar.role-superadmin{background:var(--danger-bg); color:var(--danger); border-color:var(--border-danger-tint);}
 .mrow-member-fields{display:flex; flex-direction:column; gap:5px; min-width:0; flex:1;}
 .member-name-input{font-weight:600;}
 .role-select{
@@ -1391,7 +1483,7 @@ tbody tr:hover{background:var(--surface-alt);}
   display:flex; align-items:center; justify-content:center;
   transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.notif-bell-btn:hover{background:var(--surface-alt); color:var(--primary); border-color:#C9DCE8; box-shadow:0 0 0 5px var(--primary-bg);}
+.notif-bell-btn:hover{background:var(--surface-alt); color:var(--primary); border-color:var(--border-primary-tint); box-shadow:0 0 0 5px var(--primary-bg);}
 .notif-bell-btn:active{transform:scale(.94);}
 /* Panel open — bell reads as "pressed", teal-filled, matches panel-head accent */
 .notif-bell-btn.is-open{
@@ -1516,6 +1608,15 @@ tbody tr:hover{background:var(--surface-alt);}
 .toast.show{opacity:1; transform:translateY(0) scale(1);}
 .toast-success{background:var(--success);}
 .toast-error{background:var(--danger);}
+.toast-undo{max-width:360px;}
+.toast-undo-msg{flex:1;}
+.toast-undo-btn{
+  flex-shrink:0; background:rgba(255,255,255,.22); color:#fff; border:none;
+  border-radius:6px; padding:5px 10px; font-size:12px; font-weight:700;
+  cursor:pointer; transition:background .15s ease;
+}
+.toast-undo-btn:hover{background:rgba(255,255,255,.34);}
+.toast-undo-btn:active{background:rgba(255,255,255,.44);}
 
 /* ---------- 13. Breakpoints ---------- */
 
@@ -1796,14 +1897,14 @@ tbody tr:hover{background:var(--surface-alt);}
   padding:9px 14px; font-size:12.5px; color:var(--ink-soft); background:var(--surface);
 }
 .meal-lock-pill i{font-size:13px;}
-.meal-lock-pill.success{border-color:#9FD8BC; background:var(--success-bg); color:var(--success);}
-.meal-lock-pill.warning{border-color:#F3DFAF; background:var(--warning-bg); color:var(--warning);}
-.meal-lock-pill.danger{border-color:#F2C7C2; background:var(--danger-bg); color:var(--danger);}
+.meal-lock-pill.success{border-color:var(--border-success-tint); background:var(--success-bg); color:var(--success);}
+.meal-lock-pill.warning{border-color:var(--border-warning-tint); background:var(--warning-bg); color:var(--warning);}
+.meal-lock-pill.danger{border-color:var(--border-danger-tint); background:var(--danger-bg); color:var(--danger);}
 .meal-lock-pill .pill-badge{
-  font-weight:700; padding:2px 9px; border-radius:20px; background:rgba(255,255,255,.6);
+  font-weight:700; padding:2px 9px; border-radius:20px; background:var(--surface);
   border:1px solid currentColor;
 }
-.meal-lock-pill .pill-note{color:var(--ink-faint); font-weight:500;}
+.meal-lock-pill .pill-note{color:var(--ink-soft); font-weight:500;}
 
 /* Member avatar circle (initial letter, deterministic tint per member).
    Palette kept entirely within the app's blue theme — 5 clearly distinct
@@ -1849,14 +1950,14 @@ tbody tr:hover{background:var(--surface-alt);}
   transition:border-color .15s ease, box-shadow .15s ease;
 }
 .meal-summary-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08);}
-.meal-summary-card:has(.icon-lunch){background:var(--meals-amber-bg); border-color:#F3DFAF;}
-.meal-summary-card:has(.icon-dinner){background:var(--meals-blue-bg); border-color:#C9D9F7;}
-.meal-summary-card:has(.icon-total){background:var(--success-bg); border-color:#C8ECD6;}
-.meal-summary-card:has(.icon-month){background:var(--meals-purple-bg); border-color:#DDD3FB;}
+.meal-summary-card:has(.icon-lunch){background:var(--meals-amber-bg); border-color:var(--border-warning-tint);}
+.meal-summary-card:has(.icon-dinner){background:var(--meals-blue-bg); border-color:var(--border-blue-tint);}
+.meal-summary-card:has(.icon-total){background:var(--success-bg); border-color:var(--border-success-tint);}
+.meal-summary-card:has(.icon-month){background:var(--meals-purple-bg); border-color:var(--border-purple-tint);}
 .meal-summary-icon{
   flex-shrink:0; width:38px; height:38px; border-radius:50%;
   display:flex; align-items:center; justify-content:center; font-size:15px;
-  background:rgba(255,255,255,.65);
+  background:var(--surface);
 }
 .meal-summary-icon.icon-lunch{color:var(--meals-amber);}
 .meal-summary-icon.icon-dinner{color:var(--meals-blue);}
@@ -1904,16 +2005,17 @@ tbody tr:hover{background:var(--surface-alt);}
 .menu-item-dot.dot-4{background:var(--meals-purple);}
 .menu-add-item-btn{
   margin-top:0; padding:6px 12px; font-size:12.5px; font-weight:600; min-height:0; border-radius:20px;
-  border-style:dashed; border-color:#C9D9F7; color:var(--meals-blue); background:var(--meals-blue-bg);
+  border-style:dashed; border-color:var(--border-blue-tint); color:var(--meals-blue); background:var(--meals-blue-bg);
 }
-.menu-add-item-btn:hover{background:#D6E2FA;}
+.menu-add-item-btn:hover{background:var(--primary-bg);}
+.mrg-name-info .badge.member{background:var(--success-bg); color:var(--success);}
 .meal-menu-note-row{margin-bottom:14px;}
 .meal-menu-note-row .small-note i{margin-right:5px;}
 
 /* Bottom explanatory note, boxed like the reference's info callout */
 .meal-info-box{
   display:flex; align-items:flex-start; gap:10px;
-  background:var(--primary-bg); border:1px solid #C9DCE8; border-radius:var(--radius-sm);
+  background:var(--primary-bg); border:1px solid var(--border-primary-tint); border-radius:var(--radius-sm);
   padding:12px 14px; margin-top:14px;
 }
 .meal-info-box i{color:var(--primary); font-size:14px; margin-top:2px; flex-shrink:0;}
@@ -2062,7 +2164,7 @@ details.accordion > .accordion-body{
 
 .btn.maa-reset{color:var(--ink);}
 .btn.maa-reset:hover:not(:disabled){
-  background:var(--surface-alt); border-color:#C7CDD4; transform:translateY(-1px);
+  background:var(--surface-alt); border-color:var(--border-primary-tint); transform:translateY(-1px);
 }
 .btn.maa-reset:active:not(:disabled){transform:translateY(0) scale(.95);}
 
@@ -2157,7 +2259,7 @@ details.accordion > .accordion-body{
   border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface);
   padding:14px 15px; min-width:0; transition:box-shadow .15s ease, border-color .15s ease;
 }
-.hist-stat-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08); border-color:#C9DCE8;}
+.hist-stat-card:hover{box-shadow:0 2px 8px rgba(28,39,51,0.08); border-color:var(--border-primary-tint);}
 .hist-stat-icon{
   width:34px; height:34px; border-radius:10px; flex-shrink:0;
   display:flex; align-items:center; justify-content:center; font-size:14px; margin-bottom:10px;
@@ -2240,3 +2342,212 @@ details.accordion > .accordion-body{
   }
   .hist-native-table th{font-size:8.5px !important;}
 }
+/* ---------- 15. Dark-mode overrides for hardcoded-hex inline templates ----------
+   The Grocery Cost form (gc-*), Shared Expense form (aeh-*), and the
+   Cost/Expense List view they share (cl-*) are built as self-contained
+   mini design systems with their own hex colors, defined in <style>
+   blocks injected by 13-costs.js / 14-expenses.js at render time (not
+   through the shared --token system in section 1). Because those
+   <style> blocks are re-inserted into the DOM after this stylesheet
+   loads, they'd normally win any same-specificity tie — every selector
+   below is deliberately scoped under html[data-theme="dark"] so it has
+   higher specificity than the light-mode originals and always wins,
+   regardless of render order. History's inline badge colors (pastel
+   bg + dark text swatches) are left as-is; they stay readable as
+   small accent chips even on a dark card. */
+html[data-theme="dark"] .gc-header-icon,
+html[data-theme="dark"] .cl-header-icon{
+  background:linear-gradient(135deg,#1E2740,#243252); color:var(--meals-blue); box-shadow:inset 0 0 0 1px #2F3E5C;
+}
+html[data-theme="dark"] .gc-header-text h2,
+html[data-theme="dark"] .aeh-header-text h2,
+html[data-theme="dark"] .cl-title,
+html[data-theme="dark"] .aeh-split-heading,
+html[data-theme="dark"] .aeh-split-title,
+html[data-theme="dark"] .cl-nav-btn.cl-nav-active{color:var(--ink);}
+html[data-theme="dark"] .gc-header-text p,
+html[data-theme="dark"] .aeh-header-text p,
+html[data-theme="dark"] .cl-total span,
+html[data-theme="dark"] .gc-about-text p,
+html[data-theme="dark"] .gc-info-inline p,
+html[data-theme="dark"] .cl-pagination-info,
+html[data-theme="dark"] .cl-result-note,
+html[data-theme="dark"] .aeh-split-sub{color:var(--ink-soft);}
+html[data-theme="dark"] .gc-about,
+html[data-theme="dark"] .gc-info-inline{
+  background:var(--meals-blue-bg); border-color:#2F3E5C;
+}
+/* Remaining #2563eb-hardcoded blue accents (small icons, form-label
+   glyphs, the money figure in list totals, radio accent, and the
+   per-split-method colored icon chips in Add Shared Expense) — none of
+   these were touched by the earlier section-15 pass since each has its
+   own explicit color rather than inheriting from a parent already
+   covered there. Mapped to var(--meals-blue) so they match the same
+   iOS-blue hue the rest of dark mode uses, instead of staying the old
+   light-mode #2563eb which reads as a mismatched "second blue". */
+html[data-theme="dark"] .gc-about-icon{background:var(--meals-blue); color:#1C1C1E;}
+html[data-theme="dark"] .gc-label svg,
+html[data-theme="dark"] .aeh-label svg,
+html[data-theme="dark"] .aeh-footer-info svg{color:var(--meals-blue);}
+html[data-theme="dark"] .cl-total{color:var(--meals-blue);}
+html[data-theme="dark"] .gc-split-options input[type=radio]{accent-color:var(--meals-blue);}
+html[data-theme="dark"] .aeh-split-icon.aeh-blue{background:var(--primary-bg); color:var(--meals-blue);}
+html[data-theme="dark"] .aeh-split-icon.aeh-green{background:var(--success-bg); color:var(--success);}
+html[data-theme="dark"] .aeh-split-icon.aeh-purple{background:var(--meals-purple-bg); color:var(--meals-purple);}
+html[data-theme="dark"] .aeh-info-box{background:var(--success-bg); border-color:#1F4A38;}
+html[data-theme="dark"] .gc-add-btn{background:linear-gradient(135deg,var(--primary),#0968CC); box-shadow:0 3px 10px rgba(10,132,255,.28);}
+html[data-theme="dark"] .aeh-info-icon{color:var(--success);}
+html[data-theme="dark"] .aeh-icon-box{
+  background:linear-gradient(135deg,#2A2340,#332B4D); color:var(--meals-purple); box-shadow:inset 0 0 0 1px #3D3358;
+}
+html[data-theme="dark"] .meal-lock-pill .pill-badge{background:var(--surface-alt);}
+html[data-theme="dark"] .aeh-info-box p{color:var(--ink-soft);}
+html[data-theme="dark"] .gc-about-text strong,
+html[data-theme="dark"] .aeh-split-title,
+html[data-theme="dark"] .cl-td,
+html[data-theme="dark"] .gc-input,
+html[data-theme="dark"] .gc-select,
+html[data-theme="dark"] .gc-textarea,
+html[data-theme="dark"] .aeh-input,
+html[data-theme="dark"] .aeh-select,
+html[data-theme="dark"] input.cl-search-input[type=text]{color:var(--ink);}
+html[data-theme="dark"] .gc-divider,
+html[data-theme="dark"] .cl-divider{background:linear-gradient(to right,var(--border),transparent);}
+html[data-theme="dark"] .gc-label,
+html[data-theme="dark"] .aeh-label,
+html[data-theme="dark"] .aeh-footer-info p,
+html[data-theme="dark"] .cl-nav-btn,
+html[data-theme="dark"] .cl-filter-btn,
+html[data-theme="dark"] .cl-page-btn,
+html[data-theme="dark"] .cl-action-view{color:var(--ink-soft);}
+html[data-theme="dark"] .gc-input,
+html[data-theme="dark"] .gc-select,
+html[data-theme="dark"] .gc-textarea,
+html[data-theme="dark"] .aeh-input,
+html[data-theme="dark"] .aeh-select,
+html[data-theme="dark"] .aeh-titledesc-box,
+html[data-theme="dark"] input.cl-search-input[type=text],
+html[data-theme="dark"] .cl-nav-btn,
+html[data-theme="dark"] .cl-filter-btn,
+html[data-theme="dark"] .cl-page-btn,
+html[data-theme="dark"] .cl-action-btn,
+html[data-theme="dark"] .aeh-split-card{
+  background:var(--surface-alt); border-color:var(--border);
+}
+html[data-theme="dark"] .gc-input:focus,
+html[data-theme="dark"] .gc-select:focus,
+html[data-theme="dark"] .gc-textarea:focus,
+html[data-theme="dark"] .aeh-input:focus,
+html[data-theme="dark"] .aeh-select:focus,
+html[data-theme="dark"] input.cl-search-input[type=text]:focus{background:var(--surface); border-color:var(--primary);}
+html[data-theme="dark"] .gc-input::placeholder,
+html[data-theme="dark"] .aeh-input::placeholder,
+html[data-theme="dark"] .cl-search-input::placeholder{color:var(--ink-faint);}
+html[data-theme="dark"] .gc-select-caret,
+html[data-theme="dark"] .aeh-select-caret,
+html[data-theme="dark"] .gc-input-icon,
+html[data-theme="dark"] .aeh-amount-icon,
+html[data-theme="dark"] .cl-search-icon{color:var(--ink-faint);}
+html[data-theme="dark"] .cl-th{background:var(--surface-alt); color:var(--ink-soft); border-color:var(--border);}
+html[data-theme="dark"] .cl-tr{border-color:var(--border);}
+html[data-theme="dark"] .cl-tr:hover{background:var(--surface-alt);}
+html[data-theme="dark"] .cl-pagination{border-color:var(--border);}
+html[data-theme="dark"] .cl-nav-btn:hover,
+html[data-theme="dark"] .cl-filter-btn:hover,
+html[data-theme="dark"] .cl-page-btn:hover,
+html[data-theme="dark"] .cl-action-view:hover,
+html[data-theme="dark"] .aeh-split-card:hover{background:var(--primary-bg); border-color:var(--primary);}
+html[data-theme="dark"] .cl-nav-btn.cl-nav-active{background:var(--primary); border-color:var(--primary); color:#fff;}
+html[data-theme="dark"] .cl-page-btn.cl-page-active{background:var(--meals-blue); border-color:var(--meals-blue); color:#fff;}
+html[data-theme="dark"] .cl-action-edit{color:var(--meals-blue); border-color:#2F3E5C;}
+html[data-theme="dark"] .cl-action-edit:hover{background:var(--meals-blue-bg);}
+html[data-theme="dark"] .cl-action-delete{color:var(--danger); border-color:#4A2626;}
+html[data-theme="dark"] .cl-action-delete:hover{background:var(--danger-bg);}
+html[data-theme="dark"] .aeh-split-card.aeh-selected{background:var(--primary-bg); border-color:var(--meals-blue); box-shadow:0 0 0 1px var(--meals-blue) inset;}
+html[data-theme="dark"] .aeh-footer-info{background:var(--meals-blue-bg);}
+html[data-theme="dark"] .aeh-cancel-btn{background:var(--surface-alt); color:var(--ink-soft); border-color:var(--border);}
+html[data-theme="dark"] .aeh-cancel-btn:hover{background:var(--primary-bg); border-color:var(--primary);}
+
+/* ---------- 16. iOS-flat button treatment for dark mode ----------
+   .btn's own box-shadow values (hover/active/.danger) are hardcoded to a
+   light-mode-only blue-gray rgba(51,96,127,...) — a colored halo shadow
+   like that reads as "light mode chrome" no matter what the button's own
+   fill color is. iOS system buttons in dark mode are flat: solid fill,
+   no shadow, just a subtle scale/opacity change on press. This section
+   only touches shadow — .btn's fill already comes from var(--primary)/
+   var(--danger), so it already picked up the section 1b systemBlue/Red
+   values with no extra work. */
+html[data-theme="dark"] .btn{box-shadow:none;}
+html[data-theme="dark"] .btn:hover{box-shadow:none; filter:brightness(1.1);}
+html[data-theme="dark"] .btn:active{box-shadow:none; filter:brightness(.92);}
+html[data-theme="dark"] .btn.danger{box-shadow:none;}
+html[data-theme="dark"] .btn.danger:hover{box-shadow:none; filter:brightness(1.1);}
+html[data-theme="dark"] .card:hover{box-shadow:var(--shadow-sm);}
+
+/* ---------- 17. History badges (meal-badge / method-badge) ----------
+   Previously inline style="background:#hex..." per call in 12-history.js
+   (mealBadge()/expenseMethodBadge()) — moved to classes here so dark mode
+   can actually override them; inline hex can't be reached by any external
+   stylesheet rule. Light-mode values match the original hex exactly. */
+.meal-badge, .method-badge{
+  display:inline-block; font-size:11px; font-weight:600;
+  padding:3px 9px; border-radius:999px; white-space:nowrap; border:1px solid transparent;
+}
+.meal-badge-amber, .method-badge-amber{background:#FEF3C7; border-color:#FDE68A; color:#92400E;}
+.meal-badge-indigo{background:#E0E7FF; border-color:#C7D2FE; color:#3730A3;}
+.meal-badge-purple{background:#F3E8FF; border-color:#E9D5FF; color:#6B21A8;}
+.meal-badge-slate{background:#F1F5F9; border-color:#E2E8F0; color:#475569;}
+.method-badge-blue{background:#DBEAFE; border-color:#BFDBFE; color:#1E40AF;}
+.method-badge-green{background:#D1FAE5; border-color:#A7F3D0; color:#065F46;}
+
+html[data-theme="dark"] .meal-badge-amber, html[data-theme="dark"] .method-badge-amber{
+  background:var(--warning-bg); border-color:var(--warning); color:var(--warning);
+}
+html[data-theme="dark"] .meal-badge-indigo{background:var(--meals-blue-bg); border-color:var(--meals-blue); color:var(--meals-blue);}
+html[data-theme="dark"] .meal-badge-purple{background:var(--meals-purple-bg); border-color:var(--meals-purple); color:var(--meals-purple);}
+html[data-theme="dark"] .meal-badge-slate{background:var(--surface-alt); border-color:var(--border); color:var(--ink-soft);}
+html[data-theme="dark"] .method-badge-blue{background:var(--meals-blue-bg); border-color:var(--meals-blue); color:var(--meals-blue);}
+html[data-theme="dark"] .method-badge-green{background:var(--success-bg); border-color:var(--success); color:var(--success);}
+
+/* ---------- 18. Native browser chrome (date picker icon, scrollbar) ----------
+   Two things the browser itself draws, not this stylesheet: the calendar
+   icon inside <input type=date/month> and the scrollbar thumb. Both
+   default to a dark-gray/black glyph, which is fine on white but goes
+   near-invisible on the app's own dark input/track backgrounds — the icon
+   is inverted and the scrollbar thumb re-colored so both stay visible. */
+/* NOTE: the calendar-picker-indicator icon itself is NOT hand-styled here
+   on purpose — color-scheme:dark (set on html[data-theme="dark"] in
+   section 1b) already tells Chrome/Safari to draw that icon in a
+   dark-appropriate color automatically; adding a manual filter:invert()
+   on top would double-process it and risk the opposite bug. */
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#48484A;} /* systemGray3 */
+html[data-theme="dark"] .mtab-btn.active .mtab-icon{background:linear-gradient(160deg, #2C2C2E, #232326);}
+
+/* ---------- 19. Member avatar identity colors (dark mode) ----------
+   av-0..av-4 are a light-only pastel palette (pale tint bg + navy-family
+   text) — in dark mode these pale bubbles look like stray light-mode
+   artifacts against the rest of the (now dark, muted) UI, most visible
+   on the Market Schedule tab where several avatars sit together in the
+   duty cards. Replaced with the same 5-hue family but inverted to solid
+   saturated-color bg + dark text, matching the filled-icon-token look
+   used for the meal-summary icons elsewhere in dark mode. */
+html[data-theme="dark"] .member-avatar.av-0{background:#4A6FA5; color:#F0F4FA; border-color:#4A6FA5;} /* navy */
+html[data-theme="dark"] .member-avatar.av-1{background:#5A6ACF; color:#F0F1FC; border-color:#5A6ACF;} /* indigo */
+html[data-theme="dark"] .member-avatar.av-2{background:#3E7CA6; color:#EAF4FA; border-color:#3E7CA6;} /* steel blue */
+html[data-theme="dark"] .member-avatar.av-3{background:#2E96B8; color:#E5F7FC; border-color:#2E96B8;} /* cyan-blue */
+html[data-theme="dark"] .member-avatar.av-4{background:#4A90D9; color:#EEF6FE; border-color:#4A90D9;} /* sky blue */
+
+/* ---------- 19. Meal summary icon badges (dark mode) ----------
+   In light mode the icon sits in a plain white circle (var(--surface))
+   against a pale tinted card, which pops clearly. In dark mode both the
+   card (a translucent accent tint) and the circle (var(--surface), the
+   normal dark card color) land close to the same dark shade, so the
+   circle stopped reading as a distinct "badge" — it visually merged into
+   the card instead of standing out. Fix: fill the circle solid with the
+   icon's own accent color in dark mode (iOS Settings-app icon style —
+   e.g. a solid orange circle with a white glyph) so it's unambiguous at
+   a glance instead of relying on a now-lost light/dark contrast step. */
+html[data-theme="dark"] .meal-summary-icon.icon-lunch{background:var(--meals-amber); color:#1C1C1E;}
+html[data-theme="dark"] .meal-summary-icon.icon-dinner{background:var(--meals-blue); color:#1C1C1E;}
+html[data-theme="dark"] .meal-summary-icon.icon-total{background:var(--success); color:#1C1C1E;}
+html[data-theme="dark"] .meal-summary-icon.icon-month{background:var(--meals-purple); color:#1C1C1E;}

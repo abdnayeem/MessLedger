@@ -748,19 +748,24 @@ async function deleteCost(id) {
     return;
   }
   if (!guardAdminMonthAccess(rec.date.slice(0, 7), 'costs')) return;
-  // BUGFIX: the confirm() dialog used to just say "Delete this cost
-  // record?" with no way to tell WHICH record — on the Cost List, several
-  // rows can look similar at a glance (same date, same meal type), so a
-  // superadmin clicking Delete on the wrong row could easily confirm the
-  // wrong one without noticing. Now spells out date/meal/amount/note so the
-  // person can actually verify it's the right record before confirming.
+  // UNDO TOAST (replaces the old confirm() dialog): the record disappears
+  // from the list immediately for a snappy feel, but the actual Firestore
+  // delete (deleteCostDoc) is deferred until the toast's undo window runs
+  // out. Clicking Undo just re-inserts the record locally — the server
+  // delete never fires. See showUndoToast() in 00-utils-core.js.
   const mealLabel = MEAL_TIME_LABEL[rec.mealType || 'other'] || rec.mealType || '';
   const noteText = rec.note ? ` — "${rec.note}"` : '';
-  if (!confirm(`Delete this grocery cost?\n\n${rec.date} · ${mealLabel} · ${fmtMoney(rec.amount)}${noteText}\n\nThis cannot be undone.`)) return;
+  const idx = state.costs.findIndex(c => c.id === id);
   state.costs = state.costs.filter(c => c.id !== id);
   renderTabContent();
-  showToast('Cost record deleted.', 'success');
-  deleteCostDoc(id);
+  showUndoToast(
+    `Deleted: ${rec.date} · ${mealLabel} · ${fmtMoney(rec.amount)}${noteText}`,
+    () => {
+      state.costs.splice(idx, 0, rec);
+      renderTabContent();
+    },
+    () => deleteCostDoc(id)
+  );
 }
 
 /* ---------------- SHARED EXPENSES ---------------- */

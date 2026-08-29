@@ -322,15 +322,22 @@ async function deleteDeposit(id) {
     return;
   }
   if (!guardAdminMonthAccess(rec.date.slice(0, 7), 'deposits')) return;
-  // BUGFIX (same as deleteCost()/deleteExpense()): show which record this
-  // is — date/member/amount — instead of a generic message.
+  // UNDO TOAST (same pattern as deleteCost()/deleteExpense()): the record
+  // disappears from the list immediately, but the actual Firestore delete
+  // (deleteDepositDoc) is deferred until the toast's undo window runs out.
   const memberName = memberById(rec.memberId)?.name || 'Unknown member';
   const typeLabel = rec.type === 'withdrawal' ? 'Withdrawal' : 'Deposit';
-  if (!confirm(`Delete this ${typeLabel.toLowerCase()}?\n\n${rec.date} · ${memberName} · ${fmtMoney(Math.abs(rec.amount))}\n\nThis cannot be undone.`)) return;
+  const idx = state.deposits.findIndex(d => d.id === id);
   state.deposits = state.deposits.filter(d => d.id !== id);
   renderTabContent();
-  showToast('Deposit record deleted.', 'success');
-  deleteDepositDoc(id);
+  showUndoToast(
+    `Deleted: ${rec.date} · ${memberName} · ${fmtMoney(Math.abs(rec.amount))}`,
+    () => {
+      state.deposits.splice(idx, 0, rec);
+      renderTabContent();
+    },
+    () => deleteDepositDoc(id)
+  );
 }
 
 /* ---------------- MEMBERS (superadmin only) ---------------- */

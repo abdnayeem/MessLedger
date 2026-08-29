@@ -307,8 +307,8 @@ function showBootError(message) {
   el.innerHTML = `
     <div style="max-width:320px; text-align:center; padding:0 16px;">
       <div style="font-size:28px; margin-bottom:8px;">⚠️</div>
-      <div style="color:#DC2626; font-weight:700; font-size:14px; margin-bottom:6px;">Couldn't load MessLedger</div>
-      <div style="color:#6B7280; font-size:12.5px; line-height:1.5; margin-bottom:14px;">${message}</div>
-      <button onclick="location.reload()" style="padding:8px 16px; border-radius:6px; border:1px solid #4F46E5; background:#4F46E5; color:#fff; font-weight:600; font-size:13px; cursor:pointer;">Reload</button>
+      <div style="color:var(--danger); font-weight:700; font-size:14px; margin-bottom:6px;">Couldn't load MessLedger</div>
+      <div style="color:var(--ink-faint); font-size:12.5px; line-height:1.5; margin-bottom:14px;">${message}</div>
+      <button onclick="location.reload()" style="padding:8px 16px; border-radius:6px; border:1px solid var(--primary); background:var(--primary); color:#fff; font-weight:600; font-size:13px; cursor:pointer;">Reload</button>
     </div>`;
 }

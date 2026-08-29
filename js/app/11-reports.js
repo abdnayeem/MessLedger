@@ -168,7 +168,7 @@ function ensureReportOverlayStyles() {
   const style = document.createElement('style');
   style.id = 'msledger-report-overlay-styles';
   style.textContent = `
-    #msledger-report-overlay{ position:fixed; inset:0; background:#fff; z-index:99999; overflow:auto;
+    #msledger-report-overlay{ position:fixed; inset:0; background:#fff; color-scheme:light; z-index:99999; overflow:auto;
       font-family: Arial, Helvetica, sans-serif; color:#111827; -webkit-overflow-scrolling:touch; }
     #msledger-report-overlay table{ width:100%; border-collapse:collapse; }
     #msledger-report-overlay th, #msledger-report-overlay td{ border-bottom: 1px solid #E5E7EB; }

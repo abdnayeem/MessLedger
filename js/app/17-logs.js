@@ -100,7 +100,7 @@ function renderLoginLog() {
       <div class="small-note" style="margin-bottom:12px;">Every successful sign-in and sign-out is recorded here — who, when (Bangladesh time), which action, and device/IP when they can be determined. This loads fresh each time you open this tab — leave and come back (or switch tabs) to see logins made by others while you were here. Only the most recent ${MAX_LOGIN_LOGS} records are kept.</div>
       <div class="row-between" style="margin-bottom:14px; justify-content:flex-start;">
         <input type="text" id="loginlog-search" class="search-input" style="max-width:360px; width:auto !important; flex:1 1 220px;" placeholder="Search name, role, action, device, or IP..." value="${loginLogSearch.replace(/"/g,'&quot;')}" oninput="setLoginLogSearch(this.value)">
-        <button class="btn secondary" style="background:#d33; border-color:#d33; color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearLoginLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
+        <button class="btn secondary" style="background:var(--danger); border-color:var(--danger); color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearLoginLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
         ${q ? `<div class="small-note" style="margin:0; flex-basis:100%;">${list.length} of ${state.loginLogs.length} records</div>` : ''}
       </div>
       ${list.length ? `<div class="table-responsive"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${emptyMsg}</div>`}
@@ -203,7 +203,7 @@ function renderActionLog() {
       <div class="small-note" style="margin-bottom:12px;">Every add/edit/delete made to Meals, Grocery Costs, Shared Expenses, Balances, Members, and Settings is recorded here — who, when (Bangladesh time), and what. This loads fresh each time you open this tab — leave and come back (or switch tabs) to see actions made by others while you were here. Only the most recent ${MAX_ACTION_LOGS} records are kept.</div>
       <div class="row-between" style="margin-bottom:14px; justify-content:flex-start;">
         <input type="text" id="actionlog-search" class="search-input" style="max-width:360px; width:auto !important; flex:1 1 220px;" placeholder="Search name, role, module, action, or detail..." value="${actionLogSearch.replace(/"/g,'&quot;')}" oninput="setActionLogSearch(this.value)">
-        <button class="btn secondary" style="background:#d33; border-color:#d33; color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearActionLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
+        <button class="btn secondary" style="background:var(--danger); border-color:var(--danger); color:#fff; padding:6px 10px; font-size:12px; min-height:auto; margin-top:0; box-shadow:none; flex-shrink:0;" onclick="clearActionLog()"><i class="fas fa-trash" style="margin-right:4px; font-size:11px;"></i>Clear Log</button>
         ${q ? `<div class="small-note" style="margin:0; flex-basis:100%;">${list.length} of ${state.actionLogs.length} records</div>` : ''}
       </div>
       ${list.length ? `<div class="table-responsive"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${emptyMsg}</div>`}

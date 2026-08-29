@@ -153,42 +153,63 @@ function mealActionSelector(action, memberId, type) {
   return `[data-maa="${action}"][data-maa-member="${memberId}"]${type ? `[data-maa-type="${type}"]` : ''}`;
 }
 
-// One fixed hold time for how long the confirmation stays visible. Must be
-// comfortably longer than the staged entrance animation (backdrop → card →
-// icon → ring pulse → message, ~1.06s at its longest) or the popup starts
-// fading out again before it even finishes appearing.
-const MEAL_ACTION_FEEDBACK_HOLD_MS = 2200;
-let _mealActionPopupHideTimer = null;
+// Small, non-blocking, icon-only feedback for meal add/remove/update taps
+// — replaces the old full-screen dimmed/blurred backdrop popup (~2.2s per
+// tap), which visually "blocked" the screen for every single +/- tap. Meal
+// actions happen dozens of times a day per member; a screen-dimming modal
+// for each one felt slow and intrusive, especially when tapping several
+// times in a row. This is just a small colored circle with a checkmark/
+// warning icon, no text, no backdrop — confirms the tap landed without
+// getting in the way of the next one. Styled here (JS-only) rather than in
+// css/style.css.
+const MEAL_ACTION_FEEDBACK_HOLD_MS = 550;
+let _mealActionBadgeHideTimer = null;
 
-// Shows one reusable, centered confirmation popup with a blurred/dimmed
-// backdrop, then fades it back out. It's a single element appended once to
-// <body> — not part of the Meals tab's own markup — so it's completely
-// unaffected by renderTabContent() re-running underneath it (the tab
-// redraws optimistically on click, and again moments later when the
-// realtime Firestore listener echoes the same write back).
-function showMealActionPopup(ok, text) {
-  let overlay = document.getElementById('meal-action-popup');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'meal-action-popup';
-    overlay.className = 'maa-popup-overlay';
-    overlay.innerHTML = `<div class="maa-popup-card"><div class="maa-popup-icon-wrap"><span class="maa-popup-icon-ring"></span><span class="maa-popup-icon"></span></div><div class="maa-popup-msg"></div></div>`;
-    document.body.appendChild(overlay);
+function ensureMealActionFeedbackStyles() {
+  if (document.getElementById('meal-action-feedback-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'meal-action-feedback-styles';
+  style.textContent = `
+    #meal-action-badge{
+      position:fixed; left:50%; top:70px; z-index:9999;
+      width:44px; height:44px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:18px; pointer-events:none;
+      opacity:0; transform:translate(-50%, -8px) scale(.85);
+      box-shadow:0 10px 24px -8px rgba(0,0,0,.35);
+      transition:opacity .16s ease, transform .16s ease;
+    }
+    #meal-action-badge.show{ opacity:1; transform:translate(-50%, 0) scale(1); }
+    #meal-action-badge.success{ background:var(--success,#2E8B57); }
+    #meal-action-badge.error{ background:var(--danger,#C0392B); }
+    @media (prefers-reduced-motion: reduce){
+      #meal-action-badge{ transition:opacity .1s linear; transform:translate(-50%, 0) scale(1); }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function showMealActionPopup(ok) {
+  ensureMealActionFeedbackStyles();
+  let el = document.getElementById('meal-action-badge');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'meal-action-badge';
+    document.body.appendChild(el);
   }
-  clearTimeout(_mealActionPopupHideTimer);
-  overlay.classList.remove('maa-popup-show', 'maa-popup-success', 'maa-popup-error');
-  void overlay.offsetWidth; // restart the fade-in cleanly on rapid repeat clicks
-  overlay.classList.add(ok ? 'maa-popup-success' : 'maa-popup-error');
-  overlay.querySelector('.maa-popup-icon').textContent = ok ? '✓' : '⚠';
-  overlay.querySelector('.maa-popup-msg').textContent = text;
-  requestAnimationFrame(() => overlay.classList.add('maa-popup-show'));
-  _mealActionPopupHideTimer = setTimeout(() => {
-    overlay.classList.remove('maa-popup-show');
+  clearTimeout(_mealActionBadgeHideTimer);
+  el.classList.remove('show', 'success', 'error');
+  void el.offsetWidth; // restart the animation cleanly on rapid repeat taps
+  el.classList.add(ok ? 'success' : 'error');
+  el.innerHTML = ok ? '<i class="fas fa-check"></i>' : '<i class="fas fa-exclamation"></i>';
+  requestAnimationFrame(() => el.classList.add('show'));
+  _mealActionBadgeHideTimer = setTimeout(() => {
+    el.classList.remove('show');
   }, MEAL_ACTION_FEEDBACK_HOLD_MS);
 }
 
 function flashMealAction(selector, ok, successText) {
-  showMealActionPopup(ok, ok ? successText : '⚠ Failed');
+  showMealActionPopup(ok);
   // Extra: a brief glow on the qty input itself for the Update action.
   const el = document.querySelector(selector);
   if (el && el.classList.contains('qty-input')) {
@@ -289,18 +310,6 @@ function canEditMealForDate(memberId, dateStr) {
   if (canAll) return true;
   if (memberId !== session.userId) return false;
   return !isMealLocked(dateStr);
-}
-
-// Used by the admin/super admin "Turn All Lunch/Dinner ON/OFF" bulk button
-// (see renderMealsEdit() and bulkToggleMeal() below) to decide both what
-// the button should say right now, and — when clicked — which direction to
-// toggle. "Eligible" deliberately excludes admin-blocked (frozen) rows, so
-// one locked member can't skew whether the button reads as ON or OFF for
-// everyone else.
-function allMembersHaveMealOn(type, dateStr) {
-  const dayRec = state.days[dateStr] || { meals: {} };
-  const eligible = state.members.filter(m => !isAdminBlocked(m.id));
-  return eligible.length > 0 && eligible.every(m => ((dayRec.meals[m.id] || {})[type] || 0) > 0);
 }
 
 function formatRemaining(ms) {
@@ -406,7 +415,7 @@ function renderMealMenuCard(mealType, dateStr) {
 }
 
 // Compact, self-contained styling for the admin/superadmin bulk lunch/
-// dinner toggle row (see renderMealsEdit()/bulkToggleMeal() below), the
+// dinner reset row (see renderMealsEdit()/bulkResetMeal() below), the
 // mobile fix for the Select Date field's width, and the mobile-shortened
 // lock-status pill message (.pill-full/.pill-short — see the media
 // queries below). Injected here (not css/style.css) so it's a JS-only
@@ -437,41 +446,36 @@ function ensureMealBulkActionsStyles() {
     .meal-bulk-btn i{ font-size:11px; }
     .meal-bulk-btn:hover{ filter:brightness(.97); }
     .meal-bulk-btn:active{ transform:scale(.96); }
-    .meal-bulk-btn.is-on{
-      background:var(--primary,#33607F); color:#fff; border-color:var(--primary,#33607F);
-    }
-    .meal-bulk-btn.is-on:hover{ filter:brightness(1.08); }
     @media (max-width:480px){
       .meal-bulk-row{ flex-direction:column; align-items:stretch; }
       .meal-bulk-row .meal-bulk-label{ justify-content:center; }
       .meal-bulk-btns{ width:100%; }
       .meal-bulk-btn{ flex:1; justify-content:center; padding:8px 10px; }
     }
-    /* BUGFIX (date field alone in its own row with wasted space): the
-       original min-width:200px on .meals-datebar-field, combined with
-       .meals-datebar's flex-wrap, pushed the lock-status pill onto its own
-       line below on narrow phones. Now that the pill has a short mobile
-       version (.pill-short below), both fit comfortably side by side —
-       flex-wrap:nowrap keeps them on the same row instead of stacking,
-       and the date field/input shrink to a sensible width instead of
-       stretching to 100% (which is what pushed the pill down before). */
+    /* REDESIGN: every previous attempt to squeeze the lock-status pill
+       into the SAME row as the date field kept breaking in a new way on
+       mobile — text overflowing off-screen, the native date input
+       rendering as literally "0" when shrunk too far, then Safari
+       painting its content wider than the box regardless and overlapping
+       the pill anyway. The root problem was always the same: a native
+       <input type=date> renders at an unpredictable width depending on
+       the device/browser/locale, so nothing sharing its row can be sized
+       reliably. Instead of continuing to fight that, the pill now gets
+       its OWN full-width row below the date field on mobile — no
+       competition for space, no overlap possible, and room for a proper
+       card treatment (padding, colored background, icon on the left,
+       message + time badge on the right) instead of the cramped
+       icon-and-text-only version from the last few iterations. */
     @media (max-width:480px){
-      .meals-datebar{ flex-wrap:nowrap; align-items:flex-end; gap:8px; }
-      /* BUGFIX: shrinking the date input below its native rendering
-         threshold (previously min-width:0) made the browser show broken/
-         collapsed content — literally just "0" — instead of the actual
-         date, since a native <input type=date> needs enough width to lay
-         out its day/month/year segments plus the calendar icon. 130px is
-         the safe floor for that; the pill (below) is made more compact
-         instead so the row as a whole still fits without sacrificing the
-         date input's own usability. */
-      .meals-datebar-field{ min-width:130px; width:auto; flex:1 1 130px; }
-      .meals-datebar-field input[type=date]{ min-width:130px; width:100%; }
+      .meals-datebar{ flex-wrap:wrap; gap:10px; }
+      .meals-datebar-field{ flex:1 1 auto; max-width:100%; }
       .meals-datebar .meal-lock-pill{
-        flex:0 0 auto; flex-wrap:nowrap; white-space:nowrap;
-        height:46px; box-sizing:border-box; padding:0 10px; font-size:11.5px;
-        display:inline-flex; align-items:center; gap:5px;
+        flex-basis:100%; width:100%; box-sizing:border-box;
+        justify-content:space-between; gap:10px;
+        padding:11px 14px; font-size:13px;
       }
+      .meals-datebar .meal-lock-pill i{ font-size:14px; }
+      .meals-datebar .meal-lock-pill .pill-badge{ font-weight:800; font-size:12.5px; }
     }
     /* Lock-status pill: long messages like "Time left to edit this date:
        25m (locks at 11:59 PM BD time on 2026-08-23)." are fine on desktop
@@ -621,29 +625,29 @@ function renderMealsEdit(headerHtml) {
   if (lockEnabled) {
     if (canEditAll) {
       if (locked) {
-        lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">Meals for ${mealSelectedDate} are locked (cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}), but you as admin can still edit.</span><span class="pill-short">Locked — you can still edit as admin.</span></div>`;
+        lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">Meals for ${mealSelectedDate} are locked (cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}), but you as admin can still edit.</span><span class="pill-short">Locked (edit OK)</span></div>`;
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
           lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short">Left to edit: <span class="pill-badge">${formatRemaining(remainingTime)}</span></span></div>`;
         } else {
-          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, but you as admin can still edit.</span><span class="pill-short">Past lock time — you can still edit.</span></div>`;
+          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, but you as admin can still edit.</span><span class="pill-short">Past lock (edit OK)</span></div>`;
         }
       }
     } else {
       if (locked) {
-        lockMessage = `<div class="meal-lock-pill danger"><i class="fas fa-lock"></i> <span class="pill-full">Meals for ${mealSelectedDate} are locked — the cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}. Contact an admin for changes.</span><span class="pill-short">Locked. Contact an admin.</span></div>`;
+        lockMessage = `<div class="meal-lock-pill danger"><i class="fas fa-lock"></i> <span class="pill-full">Meals for ${mealSelectedDate} are locked — the cutoff was ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}. Contact an admin for changes.</span><span class="pill-short">Locked</span></div>`;
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
           lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short">Left to edit: <span class="pill-badge">${formatRemaining(remainingTime)}</span></span></div>`;
         } else {
-          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, contact an admin for changes.</span><span class="pill-short">Past lock time. Contact an admin.</span></div>`;
+          lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, contact an admin for changes.</span><span class="pill-short">Past lock</span></div>`;
         }
       }
     }
   } else {
-    lockMessage = `<div class="meal-lock-pill success"><i class="fas fa-lock-open"></i> <span class="pill-full">Meal locking is disabled. You can edit any date anytime.</span><span class="pill-short">Locking off — edit anytime.</span></div>`;
+    lockMessage = `<div class="meal-lock-pill success"><i class="fas fa-lock-open"></i> <span class="pill-full">Meal locking is disabled. You can edit any date anytime.</span><span class="pill-short">Locking off</span></div>`;
   }
 
   // Add date range restriction note for members
@@ -656,15 +660,21 @@ function renderMealsEdit(headerHtml) {
   // width fix below — the latter applies to every role, so this can't be
   // gated behind canEditAll.
   ensureMealBulkActionsStyles();
+  // Deliberately NOT a toggle (see bulkResetMeal() below for why): with a
+  // mixed state — some members' lunch on, some off — a toggle button can't
+  // directly express "turn everyone off regardless of current state"
+  // without first turning everyone ON (a wasted, confusing extra click).
+  // These buttons always mean the same thing regardless of current state:
+  // reset that meal to off for everyone.
   const bulkMealActionsHtml = canEditAll ? `
     <div class="meal-bulk-row">
       <div class="meal-bulk-label"><i class="fas fa-bolt"></i> Bulk actions for ${mealSelectedDate}</div>
       <div class="meal-bulk-btns">
-        <button class="meal-bulk-btn ${allMembersHaveMealOn('lunch', mealSelectedDate) ? 'is-on' : ''}" onclick="bulkToggleMeal('lunch')">
-          <i class="fas fa-sun"></i> ${allMembersHaveMealOn('lunch', mealSelectedDate) ? 'All Lunch: ON' : 'All Lunch: OFF'}
+        <button class="meal-bulk-btn" onclick="bulkResetMeal('lunch')">
+          <i class="fas fa-sun"></i> Reset All Lunch
         </button>
-        <button class="meal-bulk-btn ${allMembersHaveMealOn('dinner', mealSelectedDate) ? 'is-on' : ''}" onclick="bulkToggleMeal('dinner')">
-          <i class="fas fa-moon"></i> ${allMembersHaveMealOn('dinner', mealSelectedDate) ? 'All Dinner: ON' : 'All Dinner: OFF'}
+        <button class="meal-bulk-btn" onclick="bulkResetMeal('dinner')">
+          <i class="fas fa-moon"></i> Reset All Dinner
         </button>
       </div>
     </div>` : '';
@@ -1117,13 +1127,19 @@ async function resetMealsForMember(memberId) {
   withMealActionFeedback(persistDay(dateStr), mealActionSelector('reset', memberId), `✓ Reset for ${memberById(memberId).name}`);
 }
 
-// Admin/super admin bulk shortcut: turn a meal type ON (qty 1) or OFF
-// (qty 0) for every member at once. Deliberately mutates state.days[...]
-// for every member in memory first and calls persistDay() ONCE at the end
-// — same pattern as changeMeal()/changeBothMeals()/resetMealsForMember()
-// above — rather than looping a per-member persist call, which would turn
-// one button click into N separate Firestore writes.
-async function bulkToggleMeal(type) {
+// Admin/super admin bulk shortcut: reset a meal type to OFF (qty 0) for
+// every member at once, regardless of the current per-member state.
+// Deliberately NOT a toggle — with a mixed state (some members' lunch on,
+// some off), a toggle can't directly express "turn everyone off" without
+// first forcing everyone ON (a confusing, wasted extra click just to reach
+// the state you actually wanted). This always means the same thing:
+// nobody has this meal for this date anymore.
+// Mutates state.days[...] for every member in memory first and calls
+// persistDay() ONCE at the end — same pattern as changeMeal()/
+// changeBothMeals()/resetMealsForMember() above — rather than looping a
+// per-member persist call, which would turn one button click into N
+// separate Firestore writes.
+async function bulkResetMeal(type) {
   if (session.role !== 'admin' && session.role !== 'superadmin') {
     showToast('Only admins can do this.', 'error');
     return;
@@ -1134,46 +1150,38 @@ async function bulkToggleMeal(type) {
     return;
   }
   const label = type === 'lunch' ? 'Lunch' : 'Dinner';
-  const turningOn = !allMembersHaveMealOn(type, dateStr);
-  if (!confirm(`Turn ${label} ${turningOn ? 'ON' : 'OFF'} for all members on ${dateStr}?`)) return;
+  if (!confirm(`Reset ${label} to OFF for all members on ${dateStr}?`)) return;
 
   if (!state.days[dateStr]) state.days[dateStr] = { meals: {} };
   if (!state.days[dateStr].meals) state.days[dateStr].meals = {};
   const who = `${memberById(session.userId).name} (${roleLabel(session.role)})`;
   const ts = nowTimestamp();
-  const maxQty = effectiveMaxMealQty(session.role);
-  const onVal = Math.max(0, Math.min(maxQty, 1)); // "on" = 1, clamped the same way changeMeal()/setMealQty() do — never floored above the configured max
   let changedCount = 0;
   let skippedCount = 0;
   state.members.forEach(m => {
     // An explicit admin Block freezes the row entirely — a bulk action
     // must not silently override that, same rule as every per-row control.
     if (isAdminBlocked(m.id)) { skippedCount++; return; }
-    // Turning ON respects the same per-member increase rules as the
-    // regular +/- buttons (negative-balance auto-block, meal-off/vacation
-    // flag, etc.) — turning OFF is always allowed for anyone not frozen.
-    if (turningOn && !canIncreaseMealNow(m.id)) { skippedCount++; return; }
     if (!state.days[dateStr].meals[m.id]) state.days[dateStr].meals[m.id] = { lunch: 0, dinner: 0 };
     const rec = state.days[dateStr].meals[m.id];
-    const newVal = turningOn ? onVal : 0;
-    if ((rec[type] || 0) === newVal) return; // already in the target state — don't touch the audit fields
-    rec[type] = newVal;
+    if ((rec[type] || 0) === 0) return; // already off — don't touch the audit fields
+    rec[type] = 0;
     rec[type + 'By'] = who;
     rec[type + 'At'] = ts;
     changedCount++;
   });
   renderTabContent();
   if (changedCount === 0) {
-    // Nothing to save — either everyone eligible was already in the
-    // target state, or every remaining member got skipped (blocked/
-    // frozen). Avoid a pointless Firestore write for a no-op change.
+    // Nothing to save — either everyone eligible was already off, or
+    // every remaining member got skipped (blocked/frozen). Avoid a
+    // pointless Firestore write for a no-op change.
     showToast(`No changes made${skippedCount ? ` — ${skippedCount} member${skippedCount === 1 ? '' : 's'} skipped (blocked)` : ''}.`);
     return;
   }
   const ok = await persistDay(dateStr);
   if (ok) {
     const skippedNote = skippedCount ? `, ${skippedCount} skipped (blocked)` : '';
-    showToast(`${label} turned ${turningOn ? 'ON' : 'OFF'} for ${changedCount} member${changedCount === 1 ? '' : 's'}${skippedNote}.`, 'success');
+    showToast(`${label} reset to OFF for ${changedCount} member${changedCount === 1 ? '' : 's'}${skippedNote}.`, 'success');
   }
 }
 
