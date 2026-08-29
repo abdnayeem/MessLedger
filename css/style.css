@@ -235,7 +235,7 @@ button:focus-visible, .tab-btn:focus-visible, .link-btn:focus-visible, a:focus-v
   padding:0 0 calc(var(--nav-h) + var(--safe-b) + 14px);
 }
 @media (min-width:900px){
-  #app{padding:0 clamp(1rem, 3vw, 2.5rem) 3rem;}
+  #app{padding:0 0 3rem;}
 }
 
 /* ---------- 3. Boot loader (also styled inline in index.html for pre-CSS paint) ---------- */
@@ -460,7 +460,7 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
 .main-col{display:flex; flex-direction:column; flex:1; min-width:0; width:100%;}
 
 /* ---------- 7. Navigation: bottom bar (phones) → sidebar (desktop) ---------- */
-.layout{display:flex; gap:20px; align-items:flex-start; padding:0 12px;}
+.layout{display:flex; gap:20px; align-items:flex-start; padding:0 12px 0 0;}
 
 /* Sidebar card wraps the logo/branding + nav menu into one container on
    desktop. On phones it renders as if it weren't there at all
@@ -752,6 +752,18 @@ body.more-sheet-locked{overflow:hidden;}
 .alert-card.warning{background:var(--warning-bg); border-color:var(--border-warning-tint); border-left-color:var(--warning);}
 .alert-card.success{background:var(--success-bg); border-color:var(--border-primary-tint); border-left-color:var(--success);}
 .alert-card b{font-size:14px;}
+/* Slide-in-from-the-right entrance for the tomorrow-meal reminder banner
+   (see tomorrowMealBannerHtml() in 09-dashboard.js) — a plain fade-in
+   would blend into the rest of the page; sliding in from the edge like a
+   notification draws the eye to it specifically, which matters since
+   it's the one banner on Dashboard asking for an action. Respects
+   prefers-reduced-motion via the global animation-duration override
+   already set near the top of this file. */
+@keyframes mealReminderSlideIn{
+  from{opacity:0; transform:translateX(28px);}
+  to{opacity:1; transform:translateX(0);}
+}
+.meal-reminder-banner{animation:mealReminderSlideIn .38s cubic-bezier(.22,.9,.32,1) both;}
 
 /* Monthly Active Members: one compact row per member (name + role left,
    checkbox right) instead of a tall table — the month is shown once above
@@ -1359,6 +1371,10 @@ tbody tr:hover{background:var(--surface-alt);}
     border-bottom:1px solid var(--border);
   }
   .mrg-col-label{display:none;} /* header row already labels the columns */
+  .meal-grid-col-items{
+    text-transform:none; letter-spacing:normal; font-weight:500; font-size:10.5px;
+    color:var(--ink-faint); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
 
   /* The +1 Both / Reset buttons move out of the Lunch/Dinner cells and into
      their own right-hand column: +1 Both on top, Reset underneath it
@@ -1667,7 +1683,7 @@ tbody tr:hover{background:var(--surface-alt);}
   .card{padding:20px;}
   .topbar{padding:14px 20px;}
   .month-bar{padding:10px 20px;}
-  .layout{padding:0 20px;}
+  .layout{padding:0 20px 0 0;}
 }
 
 /* Desktop: sidebar navigation replaces the bottom bar */
@@ -1732,8 +1748,8 @@ tbody tr:hover{background:var(--surface-alt);}
   .sidebar-card{
     display:flex; flex-direction:column;
     width:240px; flex:0 0 240px;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:var(--radius); box-shadow:var(--shadow-sm);
+    background:var(--surface); border:1px solid var(--border); border-left:none;
+    border-radius:0 var(--radius) var(--radius) 0; box-shadow:var(--shadow-sm);
     overflow:hidden; height:100%; min-height:0;
   }
   .sidebar-brand{
@@ -1861,7 +1877,6 @@ tbody tr:hover{background:var(--surface-alt);}
   .card{padding:24px 28px;}
   .content-wrap{padding:0 24px 28px;}
   .page-header-card{margin-left:24px; margin-right:calc(24px + 9px);}
-  #app{padding-left:2rem; padding-right:2rem;}
 }
 /* ---------- 15. Meals tab — header, date bar, avatars, total column, summary cards ----------
    Purely additive/visual — no existing selector above is changed, and nothing here
@@ -1921,8 +1936,11 @@ tbody tr:hover{background:var(--surface-alt);}
 .mrg-name-line{display:flex; align-items:center; gap:6px; font-weight:600; color:var(--ink);}
 /* Meals tab specifically shows the "Member" role tag in blue (reference
    image), not the app-wide green .badge.member used on the Members/
-   Dashboard tabs — scoped so nothing outside this row changes. */
-.mrg-name-info .badge.member{background:#EEF3FC; color:#5B7FB5;}
+   Dashboard tabs — scoped so nothing outside this row changes. Its actual
+   color values now live further down (search .mrg-name-info .badge.member
+   near the menu-add-item-btn rules) since that's where they were made
+   theme-aware — this comment stays here since this is still the
+   selector's original/expected location. */
 
 /* Total column (member's lunch+dinner total for the selected date).
    Mobile: sits top-right next to the name (see .meal-row-grid grid-area
@@ -2395,6 +2413,23 @@ html[data-theme="dark"] .aeh-split-icon.aeh-blue{background:var(--primary-bg); c
 html[data-theme="dark"] .aeh-split-icon.aeh-green{background:var(--success-bg); color:var(--success);}
 html[data-theme="dark"] .aeh-split-icon.aeh-purple{background:var(--meals-purple-bg); color:var(--meals-purple);}
 html[data-theme="dark"] .aeh-info-box{background:var(--success-bg); border-color:#1F4A38;}
+/* ---------- 20. Muted status colors for dark mode ----------
+   Several status surfaces (the Market Schedule "on duty today"/"next
+   duty" banner cards, the overdue box, the "next" status pill) used the
+   FULL-saturation status color as their border — fine in light mode
+   where it's one bright line against a pale card, but on a dark card it
+   reads as a much bolder, more "colorful" outline than the rest of dark
+   mode's muted iOS aesthetic. Switched to the same translucent tint
+   tokens used for every other status border in the app (see section 17,
+   the badges) so these cards sit at the same subdued level instead of
+   standing out. */
+html[data-theme="dark"] .msched-banner.is-today{background:var(--surface); border-color:var(--border);}
+html[data-theme="dark"] .msched-banner.is-next{background:var(--surface); border-color:var(--border);}
+html[data-theme="dark"] .msched-banner-icon.today{background:var(--surface-alt);}
+html[data-theme="dark"] .msched-banner-icon.next{background:var(--surface-alt); color:var(--warning);}
+html[data-theme="dark"] .msched-banner.is-today .msched-item-chip{background:var(--surface-alt); color:var(--ink-soft);}
+html[data-theme="dark"] .msched-status-box.next{border-color:var(--border-warning-tint);}
+html[data-theme="dark"] .msched-overdue-box{border-color:var(--border-danger-tint);}
 html[data-theme="dark"] .gc-add-btn{background:linear-gradient(135deg,var(--primary),#0968CC); box-shadow:0 3px 10px rgba(10,132,255,.28);}
 html[data-theme="dark"] .aeh-info-icon{color:var(--success);}
 html[data-theme="dark"] .aeh-icon-box{

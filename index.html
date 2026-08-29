@@ -27,6 +27,8 @@
 <title>MessLedger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="css/style.css">
@@ -230,27 +232,12 @@
 <!-- App files, in order: config → storage adapter → app logic. defer preserves this order. -->
 <script defer src="js/firebase-config.js"></script>
 <script defer src="js/storage.js"></script>
-<script defer src="js/app/00-utils-core.js"></script>
-<script defer src="js/app/01-notifications.js"></script>
-<script defer src="js/app/02-state-storage.js"></script>
-<script defer src="js/app/03-persistence.js"></script>
-<script defer src="js/app/04-format-helpers.js"></script>
-<script defer src="js/app/05-session-sync.js"></script>
-<script defer src="js/app/06-auth.js"></script>
-<script defer src="js/app/07-ui-shell.js"></script>
-<script defer src="js/app/08-calculations.js"></script>
-<script defer src="js/app/09-dashboard.js"></script>
-<script defer src="js/app/10-meals.js"></script>
-<script defer src="js/app/11-reports.js"></script>
-<script defer src="js/app/12-history.js"></script>
-<script defer src="js/app/13-costs.js"></script>
-<script defer src="js/app/14-expenses.js"></script>
-<script defer src="js/app/15-deposits.js"></script>
-<script defer src="js/app/16-members.js"></script>
-<script defer src="js/app/17-logs.js"></script>
-<script defer src="js/app/18-settings-admin.js"></script>
-<script defer src="js/app/19-backup-testdata.js"></script>
-<script defer src="js/app/20-bootstrap.js"></script>
+<!-- Perf: js/app/00..20 (21 files) are bundled into this ONE file to cut
+     ~21 separate script requests down to 1 -- same code, same order, same
+     global scope as before (see js/app/bundle.js header comment). Edit the
+     individual numbered files in js/app/ as usual; just regenerate
+     bundle.js after. -->
+<script defer src="js/app/bundle.js"></script>
 <script defer src="js/responsive-tables.js"></script>
 </body>
 </html>

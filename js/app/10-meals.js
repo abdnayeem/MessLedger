@@ -367,12 +367,23 @@ window.addEventListener('resize', () => {
 // id, and with no "any duty that day" fallback (that fallback exists there
 // only for the shiftless "Other/Grocery" cost type, which doesn't apply to
 // a Lunch/Dinner menu card).
+// Memoized via the same _calcCache used by 08-calculations.js (see memo()
+// there) — a single Dashboard render calls this twice (banner subtitle,
+// lunch+dinner) and a single Meals-tab render calls it FOUR times (menu
+// card + grid-header subtitle, each for lunch and dinner), all with the
+// exact same (dateStr, mealType) pairs re-scanning the same member list.
+// memo() caches the result the first time and reuses it for the rest of
+// that render pass; it's already cleared on every persist*() write
+// (_markEdited), so a duty change (e.g. market day edited) is never
+// served stale.
 function dutyMemberForDateMeal(dateStr, mealType) {
   if (!dateStr) return null;
-  const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d)) return null;
-  const weekday = d.getDay(); // 0=Sunday, matching WEEKDAYS/member.marketDay
-  return (state.members || []).find(m => hasMarketDay(m) && Number(m.marketDay) === weekday && (m.marketShift === 'both' || m.marketShift === mealType)) || null;
+  return memo('dutyMemberForDateMeal_' + dateStr + '_' + mealType, () => {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d)) return null;
+    const weekday = d.getDay(); // 0=Sunday, matching WEEKDAYS/member.marketDay
+    return (state.members || []).find(m => hasMarketDay(m) && Number(m.marketDay) === weekday && (m.marketShift === 'both' || m.marketShift === mealType)) || null;
+  });
 }
 
 // Renders the Lunch/Dinner Menu card for the selected date, sourced entirely
@@ -381,6 +392,19 @@ function dutyMemberForDateMeal(dateStr, mealType) {
 // this is purely a read-only view into 09-dashboard.js's schedule feature.
 // Editing still happens on the Market Schedule tab (superadmin only, same
 // as today) — "+ Add Item" just jumps there.
+// Small "what's cooking" subtitle under the Lunch/Dinner column headers
+// in the per-member counting grid — reuses the exact same duty/items data
+// as renderMealMenuCard() above it (no separate data source), just shown
+// again down here so it stays visible while scrolling the member list
+// instead of having to scroll back up to the menu cards to check it.
+function mealGridColItemsHtml(dateStr, mealType) {
+  const duty = dutyMemberForDateMeal(dateStr, mealType);
+  const itemsStr = (duty && duty.marketItems) ? duty.marketItems.trim() : '';
+  if (!itemsStr) return '';
+  const items = itemsStr.split(',').map(s => s.trim()).filter(Boolean);
+  return `<div class="meal-grid-col-items" title="${escapeHtml(itemsStr)}">${escapeHtml(items.join(', '))}</div>`;
+}
+
 function renderMealMenuCard(mealType, dateStr) {
   const label = mealType === 'lunch' ? 'Lunch Menu' : 'Dinner Menu';
   const icon = mealType === 'lunch' ? 'fa-sun' : 'fa-moon';
@@ -701,7 +725,7 @@ function renderMealsEdit(headerHtml) {
       </div>
       <div class="meal-grid-list">
         <div class="meal-row-grid meal-row-grid-head">
-          <div>Member</div><div>Lunch</div><div>Dinner</div><div>Total</div><div>Quick Actions</div>
+          <div>Member</div><div>Lunch${mealGridColItemsHtml(mealSelectedDate, 'lunch')}</div><div>Dinner${mealGridColItemsHtml(mealSelectedDate, 'dinner')}</div><div>Total</div><div>Quick Actions</div>
         </div>
         ${rows}
       </div>

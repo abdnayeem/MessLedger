@@ -247,7 +247,163 @@ async function confirmMarketCompletion(memberId, mealType, dateStr) {
   showToast(`${mealLabel} market marked as completed.`, 'success');
 }
 
+/* ---------------- TREND CHARTS (Meals & Grocery Cost, last up to 6 months) ----------------
+   Plain inline SVG bars computed from data already in state (monthTotalMeals/
+   monthTotalCost, which are already memoized — see 08-calculations.js) — no
+   charting library added, so this doesn't add a single byte to the app's
+   script payload beyond this file (keeps the fast-load work from earlier
+   intact). Meal-count trend is shown to every role (same numbers a member
+   can already see for themselves elsewhere); Grocery Cost trend is
+   admin/superadmin-only, matching the same role gate as the Grocery Costs
+   tab itself (see tabsForRole() in 07-ui-shell.js) — regular members have
+   no other view of mess-wide grocery spending, so this shouldn't be the
+   first place they see it either. */
+function trendMonths() {
+  return allKnownMonths().slice(-6); // ascending, oldest..newest, max 6
+}
+function monthShortLabel(monthStr) {
+  const idx = Number(monthStr.slice(5, 7)) - 1;
+  return `${MONTHS_SHORT[idx]} '${monthStr.slice(2, 4)}`;
+}
+// Renders one row of bars for `values` (same length/order as `months`).
+// valueFormatter controls the number shown above each bar (plain count vs money).
+function trendBarChartSvg(months, values, barColorVar, valueFormatter) {
+  const W = 640,
+    H = 148,
+    padTop = 20,
+    padBottom = 24,
+    padSide = 6;
+  const n = months.length;
+  const chartW = W - padSide * 2;
+  const chartH = H - padTop - padBottom;
+  const maxVal = Math.max(1, ...values); // avoid divide-by-zero when every month is 0
+  const barGap = n > 1 ? 10 : 0;
+  const barW = Math.max(14, (chartW - barGap * (n - 1)) / n);
+  const bars = months.map((m, i) => {
+    const v = values[i];
+    const barH = Math.round((v / maxVal) * chartH);
+    const x = padSide + i * (barW + barGap);
+    const y = padTop + (chartH - barH);
+    const labelY = y - 6 < 11 ? 11 : y - 6;
+    return `
+      <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 1)}" rx="4" fill="${barColorVar}"><title>${monthShortLabel(m)}: ${valueFormatter(v)}</title></rect>
+      <text x="${x + barW / 2}" y="${labelY}" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">${valueFormatter(v)}</text>
+      <text x="${x + barW / 2}" y="${H - 7}" text-anchor="middle" font-size="10.5" fill="var(--ink-faint)">${monthShortLabel(m)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto; display:block; overflow:visible;">${bars}</svg>`;
+}
+function renderTrendsCard() {
+  const months = trendMonths();
+  if (!months.length) return ''; // brand-new mess, no data to trend yet
+  const mealValues = months.map(m => monthTotalMeals(m));
+  const canSeeCosts = session.role === 'admin' || session.role === 'superadmin';
+  const costChartHtml = canSeeCosts ? `
+      <div style="margin-top:18px; padding-top:14px; border-top:1px dashed var(--border);">
+        <div class="small-note" style="margin:0 0 8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Grocery Cost / Month</div>
+        ${trendBarChartSvg(months, months.map(m => monthTotalCost(m)), 'var(--danger)', v => fmtMoney(v))}
+      </div>` : '';
+  return `
+    <div class="card">
+      <h2>📈 Trends <span class="small-note" style="margin:0; font-weight:400;">(last ${months.length} month${months.length > 1 ? 's' : ''})</span></h2>
+      <div>
+        <div class="small-note" style="margin:0 0 8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Total Meals / Month</div>
+        ${trendBarChartSvg(months, mealValues, 'var(--primary)', v => String(v))}
+      </div>
+      ${costChartHtml}
+    </div>`;
+}
+
 /* ---------------- DASHBOARD ---------------- */
+/* ---------------- TOMORROW-MEAL-OFF REMINDER BANNER ----------------
+   Shows a small dismissible card at the top of Dashboard when the
+   logged-in member has BOTH lunch and dinner off (0) for tomorrow and
+   there's still time to change it (mirrors the same isMealLocked() gate
+   Meals tab itself uses, so this never offers an action that would then
+   fail as "locked"). Dismissing hides it for the rest of that specific
+   tomorrow-date only (localStorage) — it reappears once the date rolls
+   over to a new "tomorrow" that's also still off. */
+function tomorrowMealReminderDismissKey() {
+  return `messledger-meal-reminder-dismissed:${session.userId}:${tomorrowStr()}`;
+}
+function shouldShowTomorrowMealBanner() {
+  if (!session || !session.userId) return false;
+  const m = memberById(session.userId);
+  if (!m) return false;
+  const d = tomorrowStr();
+  if (isMealLocked(d)) return false; // no point offering an action that's already too late
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(tomorrowMealReminderDismissKey()) === '1'; } catch (e) {}
+  if (dismissed) return false;
+  const rec = state.days[d] && state.days[d].meals && state.days[d].meals[session.userId];
+  const lunch = (rec && rec.lunch) || 0;
+  const dinner = (rec && rec.dinner) || 0;
+  return lunch === 0 && dinner === 0;
+}
+function tomorrowMealItemsSubtitle(d) {
+  const lunchDuty = dutyMemberForDateMeal(d, 'lunch');
+  const dinnerDuty = dutyMemberForDateMeal(d, 'dinner');
+  const lunchItems = (lunchDuty && lunchDuty.marketItems) ? lunchDuty.marketItems.trim() : '';
+  const dinnerItems = (dinnerDuty && dinnerDuty.marketItems) ? dinnerDuty.marketItems.trim() : '';
+  const parts = [];
+  if (lunchItems) parts.push(`<b>Lunch:</b> ${escapeHtml(lunchItems)}`);
+  if (dinnerItems) parts.push(`<b>Dinner:</b> ${escapeHtml(dinnerItems)}`);
+  if (!parts.length) return '';
+  return `<div class="small-note" style="margin-top:3px;">🍳 ${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+}
+function tomorrowMealBannerHtml() {
+  if (!shouldShowTomorrowMealBanner()) return '';
+  const d = tomorrowStr();
+  const dLabel = fmtShortDate(new Date(d + 'T00:00:00'));
+  return `<div class="alert-card warning meal-reminder-banner" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1 1 220px; min-width:0;">
+      <b style="color:var(--warning);">🍽️ No meals on for tomorrow (${dLabel})</b>
+      <div style="margin-top:4px;" class="small-note">You haven't turned on Lunch or Dinner for tomorrow yet.</div>
+      ${tomorrowMealItemsSubtitle(d)}
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; flex:0 0 auto;">
+      <button type="button" class="btn" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="turnOnTomorrowMeals()">✓ Turn Both On</button>
+      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="goToMealsForTomorrow()">Customize</button>
+      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 10px; font-size:12.5px;" onclick="dismissTomorrowMealBanner()">Not now</button>
+    </div>
+  </div>`;
+}
+async function turnOnTomorrowMeals() {
+  const d = tomorrowStr();
+  const memberId = session.userId;
+  if (!canEditMealForDate(memberId, d)) {
+    showToast('Meals for tomorrow are locked and can no longer be changed.', 'error');
+    renderTabContent();
+    return;
+  }
+  if (isAdminBlocked(memberId) || !canIncreaseMealNow(memberId)) {
+    showToast(`Can't turn on meals — reason: ${mealBlockReasons(memberId).join(', ')}.`, 'error');
+    renderTabContent();
+    return;
+  }
+  if (!state.days[d]) state.days[d] = { meals: {} };
+  if (!state.days[d].meals) state.days[d].meals = {};
+  if (!state.days[d].meals[memberId]) state.days[d].meals[memberId] = { lunch: 0, dinner: 0 };
+  const who = `${memberById(session.userId).name} (${roleLabel(session.role)})`;
+  const now = nowTimestamp();
+  state.days[d].meals[memberId].lunch = 1;
+  state.days[d].meals[memberId].dinner = 1;
+  state.days[d].meals[memberId].lunchBy = who;
+  state.days[d].meals[memberId].dinnerBy = who;
+  state.days[d].meals[memberId].lunchAt = now;
+  state.days[d].meals[memberId].dinnerAt = now;
+  renderTabContent();
+  const ok = await persistDay(d);
+  if (ok) showToast('Tomorrow\'s Lunch and Dinner turned on.', 'success');
+}
+function goToMealsForTomorrow() {
+  mealSelectedDate = tomorrowStr();
+  setTab('meals');
+}
+function dismissTomorrowMealBanner() {
+  try { localStorage.setItem(tomorrowMealReminderDismissKey(), '1'); } catch (e) {}
+  renderTabContent();
+}
+
 function renderDashboard() {
   const memberStatCards = [];
   const rows = state.members.map(m => {
@@ -409,7 +565,7 @@ function renderDashboard() {
   let marketBox = '';
   if (todayDuty.length) {
     const t = dayMealTotals(todayStr());
-    marketBox = `<div class="card" style="background:var(--success-bg); border-color:var(--success);">
+    marketBox = `<div class="card" style="background:var(--success-bg); border-color:var(--border-success-tint);">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div><b style="color:var(--success);">🛒 Market duty today:</b> ${todayDuty.map(x=>`${x.member.name} (${shiftLabel(x.member.marketShift)})`).join(', ')}</div>
         <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
@@ -425,7 +581,7 @@ function renderDashboard() {
     const nextGroup = upcomingDuty.filter(x => x.info.daysLeft === nearestDays);
     const names = nextGroup.map(x => `<b>${x.member.name}</b> (${shiftLabel(x.member.marketShift)})`).join(', ');
     const g = nextGroup[0].info;
-    marketBox = `<div class="card" style="background:var(--warning-bg); border-color:var(--warning); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+    marketBox = `<div class="card" style="background:var(--warning-bg); border-color:var(--border-warning-tint); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <div>🛒 Next market duty: ${names} — ${WEEKDAYS[nextGroup[0].member.marketDay]} (${formatCountdown(g.remDays, g.remHours, g.remMinutes)} left)</div>
       <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
     </div>`;
@@ -454,6 +610,7 @@ function renderDashboard() {
     </div>`;
 
   return `
+    ${tomorrowMealBannerHtml()}
     ${banner}
     ${marketBox}
     ${myStatsCard}
@@ -502,6 +659,7 @@ function renderDashboard() {
         <div class="summary-box"><div class="label">Cash in Hand (All-Time)</div><div class="value ${groupCash>=0?'pos':'neg'}">${fmtMoney(groupCash)}</div></div>
       </div>
     </div>
+    ${renderTrendsCard()}
     ${personalReportCard}`;
 }
 

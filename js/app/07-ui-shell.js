@@ -7,15 +7,15 @@ function renderTopWho() {
   const bal = myTotalBalance();
   let balColor = 'var(--success)',
     balBg = 'var(--success-bg)',
-    balBorder = 'var(--success)';
+    balBorder = 'var(--border-success-tint)';
   if (bal < 0) {
     balColor = 'var(--danger)';
     balBg = 'var(--danger-bg)';
-    balBorder = 'var(--danger)';
+    balBorder = 'var(--border-danger-tint)';
   } else if (bal < state.settings.lowBalanceWarn) {
     balColor = 'var(--warning)';
     balBg = 'var(--warning-bg)';
-    balBorder = 'var(--warning)';
+    balBorder = 'var(--border-warning-tint)';
   }
   const balText = bal >= 0 ? `৳${Math.round(bal).toLocaleString('en-US')}` : `-৳${Math.round(Math.abs(bal)).toLocaleString('en-US')}`;
   checkLowBalanceNotification(session.userId, bal);
