@@ -299,8 +299,8 @@ function renderTrendsCard() {
   const canSeeCosts = session.role === 'admin' || session.role === 'superadmin';
   const costChartHtml = canSeeCosts ? `
       <div style="margin-top:18px; padding-top:14px; border-top:1px dashed var(--border);">
-        <div class="small-note" style="margin:0 0 8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Grocery Cost / Month</div>
-        ${trendBarChartSvg(months, months.map(m => monthTotalCost(m)), 'var(--danger)', v => fmtMoney(v))}
+        <div class="small-note" style="margin:0 0 8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Total Cost / Month <span style="font-weight:400; text-transform:none; letter-spacing:normal;">(Grocery + Shared Expense)</span></div>
+        ${trendBarChartSvg(months, months.map(m => monthTotalCost(m) + monthTotalExpense(m)), 'var(--danger)', v => fmtMoney(v))}
       </div>` : '';
   return `
     <div class="card">
@@ -498,13 +498,25 @@ function renderDashboard() {
   const myMonthlyExpense = myCost + myExpShare;
   const myBalFmt = myBal >= 0 ? `<span class="pos">${fmtMoney(myBal)}</span>` : `<span class="neg">-${fmtMoney(Math.abs(myBal))}</span>`;
   const myRateBreakdown = `This month's meal cost ${fmtMoney(myCost)} + your expense share ${fmtMoney(myExpShare)} = ${fmtMoney(myCost+myExpShare)} ÷ ${myMeals} meals`;
+  const myDepositMonth = memberDepositMonth(session.userId);
+  const myMonthDepositEntries = state.deposits
+    .filter(d => d.memberId === session.userId && d.date.startsWith(currentMonth) && Number(d.amount || 0) !== 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const myDepositBreakdownLine = myMonthDepositEntries.length ?
+    myMonthDepositEntries.map((d, i) => {
+      const amt = Number(d.amount || 0);
+      const sign = amt < 0 ? '-' : (i === 0 ? '' : '+');
+      return `${sign}${fmtMoney(Math.abs(amt))}`;
+    }).join('') + `=${fmtMoney(myMonthDepositEntries.reduce((s, d) => s + Number(d.amount || 0), 0))}` :
+    'No deposits yet';
   const myStatsCard = `
     <div class="card">
       <h2>Your Summary</h2>
       <div class="summary-grid">
         <div class="summary-box"><div class="label">Current Balance</div><div class="value">${myBalFmt}</div></div>
         <div class="summary-box"><div class="label">Total Meals (${currentMonth})</div><div class="value">${myMeals}</div></div>
-        <div class="summary-box"><div class="label">This Month's Expense</div><div class="value">${fmtMoney(myMonthlyExpense)}</div></div>
+        <div class="summary-box"><div class="label">This Month's Expense</div><div class="value" style="display:flex; align-items:baseline; flex-wrap:wrap; gap:5px;">${fmtMoney(myMonthlyExpense)}<span style="font-size:10px; font-weight:400; color:var(--ink-faint); line-height:1.3;">Grocery ${fmtMoney(myCost)}+Shared ${fmtMoney(myExpShare)}=${fmtMoney(myMonthlyExpense)}</span></div></div>
+        <div class="summary-box"><div class="label">Total Deposit (${currentMonth})</div><div class="value" style="display:flex; align-items:baseline; flex-wrap:wrap; gap:5px;">${fmtMoney(myDepositMonth)}<span style="font-size:10px; font-weight:400; color:var(--ink-faint); line-height:1.3;">${myDepositBreakdownLine}</span></div></div>
       </div>
       <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);">
         <div class="small-note" style="margin:0; font-weight:700; text-transform:uppercase; letter-spacing:.3px;">Personal Meal Rate</div>
@@ -565,13 +577,13 @@ function renderDashboard() {
   let marketBox = '';
   if (todayDuty.length) {
     const t = dayMealTotals(todayStr());
-    marketBox = `<div class="card" style="background:var(--success-bg); border-color:var(--border-success-tint);">
+    marketBox = `<div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div><b style="color:var(--success);">🛒 Market duty today:</b> ${todayDuty.map(x=>`${x.member.name} (${shiftLabel(x.member.marketShift)})`).join(', ')}</div>
         <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
       </div>
       ${todayDuty.filter(x=>x.member.marketItems).map(x=>`<div class="small-note" style="margin-top:4px;">🧺 <b>${x.member.name}</b>'s items: ${x.member.marketItems}</div>`).join('')}
-      <div class="small-note" style="margin-top:8px; background:var(--warning-bg); border:1px dashed var(--warning); border-radius:var(--radius-sm); padding:7px 10px; color:var(--warning); font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px;">${t.lunch}</b> Lunch, <b style="font-size:17px;">${t.dinner}</b> Dinner (<b style="font-size:17px;">${t.total}</b> total).</div>
+      <div class="small-note" style="margin-top:8px; background:var(--surface-alt); border:1px dashed var(--border); border-radius:var(--radius-sm); padding:7px 10px; color:var(--ink-soft); font-weight:600;">🛒 Shop for today's meals — <b style="font-size:17px; color:var(--ink);">${t.lunch}</b> Lunch, <b style="font-size:17px; color:var(--ink);">${t.dinner}</b> Dinner (<b style="font-size:17px; color:var(--ink);">${t.total}</b> total).</div>
     </div>`;
   } else if (upcomingDuty.length) {
     // Show everyone whose duty falls on that same nearest date (e.g. one
@@ -581,7 +593,7 @@ function renderDashboard() {
     const nextGroup = upcomingDuty.filter(x => x.info.daysLeft === nearestDays);
     const names = nextGroup.map(x => `<b>${x.member.name}</b> (${shiftLabel(x.member.marketShift)})`).join(', ');
     const g = nextGroup[0].info;
-    marketBox = `<div class="card" style="background:var(--warning-bg); border-color:var(--border-warning-tint); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+    marketBox = `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <div>🛒 Next market duty: ${names} — ${WEEKDAYS[nextGroup[0].member.marketDay]} (${formatCountdown(g.remDays, g.remHours, g.remMinutes)} left)</div>
       <button class="btn secondary" style="margin-top:0;" onclick="setTab('schedule')">View full schedule</button>
     </div>`;

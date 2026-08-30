@@ -34,6 +34,12 @@ let session = {
 };
 let pendingLoginId = null;
 let activeTab = 'dashboard';
+// Key this device's last-visited tab is stashed under, so a page refresh
+// (or PWA relaunch) while an existing session is still valid can resume on
+// the same tab instead of always dropping back to Dashboard — see setTab()
+// (07-ui-shell.js) for where this is written and enterApp() (06-auth.js)
+// for where it's read back on a persisted-session restore.
+const ACTIVE_TAB_STORAGE_KEY = 'messledger-active-tab';
 // Returns the current "YYYY-MM" using the DEVICE'S LOCAL date, not UTC.
 // (new Date().toISOString() is UTC-based, so in timezones ahead of UTC — like
 // Bangladesh, UTC+6 — it can report the wrong/previous month for part of the
@@ -120,6 +126,24 @@ function clearCalcCache() {
   _calcStats = {
     hits: 0,
     misses: 0
+  };
+}
+
+// Generic debounce — delays calling fn until `wait` ms have passed since
+// the last call. Used for the four list-search inputs (Grocery Costs,
+// Shared Expenses, History-grocery, History-expense): each keystroke used
+// to call renderTabContent() synchronously, which rebuilds that whole
+// tab's DOM (including the search input itself, hence the refocus dance
+// in each caller) on every single character typed — on a list with a few
+// hundred records this was visibly laggy while typing fast. Debouncing
+// just the render (not the state update) means the browser's own native
+// text input still echoes instantly, and the expensive
+// filter+re-render only happens once typing pauses.
+function debounce(fn, wait) {
+  let t = null;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), wait);
   };
 }
 

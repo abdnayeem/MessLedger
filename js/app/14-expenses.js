@@ -134,15 +134,18 @@ function setExpensesView(mode) {
   renderTabContent();
 }
 
-function setExpensesSearch(val) {
-  expensesSearch = val;
-  expensesPage = 1;
+const _debouncedExpensesSearchRender = debounce(() => {
   renderTabContent();
   const el = document.getElementById('expenses-search');
   if (el) {
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }
+}, 180);
+function setExpensesSearch(val) {
+  expensesSearch = val;
+  expensesPage = 1;
+  _debouncedExpensesSearchRender();
 }
 
 function expenseMethodLabel(splitType, mealTypeSplit, isEveryoneFallback) {

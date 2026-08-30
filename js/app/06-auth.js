@@ -10,7 +10,7 @@ function enterApp(m, opts) {
     role: m.role
   };
   sessionExpiresAt = opts.expiresAt || computeSessionExpiry();
-  if (opts.persist !== false) persistSession(m);
+  if (opts.persist !== false) persistSession(m, opts.remember);
   // Notifications aren't part of the full-state fetch above anymore (see
   // loadNotifications() in 02-state-storage.js) — fetch this member's own
   // on login so the bell isn't empty until the next scheduler tick/bell-open.
@@ -29,7 +29,19 @@ function enterApp(m, opts) {
   startRealtimeSync(); // moved here from bindActivityTracking() — only open the live listener once someone is actually signed in
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-screen').style.display = 'block';
+  // Resume on the last-visited tab after a page refresh / PWA relaunch of
+  // an already-signed-in session (opts.persist === false — see
+  // paintFromState() in 20-bootstrap.js), instead of always dropping back
+  // to Dashboard. A genuinely fresh manual login still starts on Dashboard
+  // as before. The saved tab is checked against tabsForRole() so a stale
+  // saved id that this role no longer has access to (e.g. saved while
+  // superadmin, role since changed) safely falls back to Dashboard too.
   activeTab = 'dashboard';
+  if (opts.persist === false) {
+    let savedTab = null;
+    try { savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY); } catch (e) {}
+    if (savedTab && tabsForRole().some(t => t.id === savedTab)) activeTab = savedTab;
+  }
   // Recompute on every login — see getCurrentMonthStr() comment above for why
   // relying only on the value set when the script first loaded isn't enough.
   currentMonth = getCurrentMonthStr();
@@ -182,6 +194,110 @@ function toggleMaintenanceLoginForm() {
   renderLogin();
 }
 
+// The main brand mark used at the top of both the mobile card and the
+// desktop illustration panel: a soft halo, two small clouds, two leaf
+// sprigs, a ground shadow, and a rounded gradient icon with a document +
+// green checkmark badge — an original drawing (not a traced copy of any
+// stock asset) built to the same *composition* as the reference design.
+function loginHeroIconSvg() {
+  return `
+  <svg class="login-hero-svg" viewBox="0 0 200 170" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="100" cy="82" r="66" fill="var(--primary-bg)" opacity="0.7"/>
+    <ellipse cx="100" cy="150" rx="72" ry="7" fill="var(--border)" opacity="0.45"/>
+    <g opacity="0.55" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5">
+      <ellipse cx="34" cy="46" rx="15" ry="9"/><ellipse cx="46" cy="42" rx="11" ry="8"/><ellipse cx="24" cy="42" rx="9" ry="7"/>
+      <ellipse cx="168" cy="58" rx="14" ry="8"/><ellipse cx="179" cy="55" rx="9" ry="7"/>
+    </g>
+    <g>
+      <path d="M40 140c4-24 24-30 30-14-8 4-22 18-30 14z" fill="var(--primary-bg)" stroke="var(--primary)" stroke-width="1.5"/>
+      <path d="M48 152v-24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M160 140c-4-24-24-30-30-14 8 4 22 18 30 14z" fill="var(--primary-bg)" stroke="var(--primary)" stroke-width="1.5"/>
+      <path d="M152 152v-24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+    </g>
+    <rect x="60" y="32" width="80" height="80" rx="22" fill="url(#loginHeroGrad)"/>
+    <defs>
+      <linearGradient id="loginHeroGrad" x1="60" y1="32" x2="140" y2="112" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="var(--primary)"/>
+        <stop offset="1" stop-color="var(--accent)"/>
+      </linearGradient>
+    </defs>
+    <rect x="82" y="52" width="36" height="44" rx="5" fill="#fff" opacity="0.95"/>
+    <rect x="89" y="62" width="22" height="3.5" rx="1.5" fill="var(--primary)" opacity="0.55"/>
+    <rect x="89" y="70" width="22" height="3.5" rx="1.5" fill="var(--primary)" opacity="0.4"/>
+    <rect x="89" y="78" width="14" height="3.5" rx="1.5" fill="var(--primary)" opacity="0.4"/>
+    <circle cx="122" cy="98" r="15" fill="#22C55E" stroke="var(--surface)" stroke-width="3"/>
+    <path d="M115 98l5 5 9-10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// Small, dependency-free original illustration for the desktop login panel
+// (a clipboard/checklist scene) — drawn from scratch with plain SVG shapes
+// using the app's own CSS variables, not copied from any stock asset, so
+// it always matches the current theme (including dark mode) automatically.
+function loginIllustrationSvg() {
+  return `
+  <svg class="login-illustration-svg" viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="110" cy="182" rx="70" ry="10" fill="var(--border)" opacity="0.4"/>
+    <rect x="55" y="30" width="110" height="140" rx="14" fill="var(--surface)" stroke="var(--border)" stroke-width="2"/>
+    <rect x="88" y="20" width="44" height="16" rx="6" fill="var(--primary)"/>
+    <circle cx="76" cy="62" r="8" fill="none" stroke="var(--primary)" stroke-width="2.5"/>
+    <path d="M72 62l3 3 6-6" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="94" y="58" width="56" height="8" rx="4" fill="var(--surface-alt)"/>
+    <circle cx="76" cy="92" r="8" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <path d="M72 92l3 3 6-6" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="94" y="88" width="44" height="8" rx="4" fill="var(--surface-alt)"/>
+    <circle cx="76" cy="122" r="8" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+    <rect x="94" y="118" width="50" height="8" rx="4" fill="var(--surface-alt)"/>
+    <circle cx="150" cy="146" r="20" fill="none" stroke="var(--surface-alt)" stroke-width="8"/>
+    <path d="M150 126a20 20 0 0 1 17.3 30" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M150 126a20 20 0 0 0 -14 34" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M30 130c8-22 30-24 34-6-10 2-26 14-34 6z" fill="var(--primary-bg)" stroke="var(--primary)" stroke-width="1.5"/>
+    <path d="M40 170v-38" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// Static, always-safe "who do I contact" info shown from the login screen —
+// deliberately just a message (no phone/email baked in here, since that
+// varies per mess and isn't part of app state before anyone's signed in).
+function showLoginHelp() {
+  alert('Having trouble signing in?\n\n\u2022 Double-check your phone number and PIN.\n\u2022 Forgot your PIN? Use the "Forgot PIN?" link with your recovery code.\n\u2022 Still stuck? Contact your mess admin \u2014 they can reset your PIN or reactivate your account.');
+}
+
+// Small, login-screen-only translation dictionary + language switcher (the
+// rest of the app has no i18n, so this is deliberately scoped to just the
+// login form's static strings — see the language pill in renderLogin()).
+let _loginLang = 'en';
+const LOGIN_I18N = {
+  en: {
+    sub: 'Meal & expense tracker',
+    welcome: 'Welcome', welcomeAccent: 'back!',
+    headline: 'Smart. Simple. Organized.',
+    copy: 'Track meals, manage expenses, and stay in control of your mess easily.',
+    tagline: 'Enter your phone number and PIN to continue.',
+    phoneLabel: 'Your phone number', phonePlaceholder: 'Enter your phone number',
+    pinLabel: 'Your PIN', pinPlaceholder: '4-digit PIN',
+    remember: 'Remember me on this device', forgotPin: 'Forgot PIN?',
+    signIn: 'Sign In', or: 'or', needHelp: 'Need help?',
+    footnote: 'Contact your mess admin if you face any issues.', footnoteBold: 'mess admin'
+  },
+  bn: {
+    sub: 'মিল ও খরচ ট্র্যাকার',
+    welcome: 'স্বাগতম', welcomeAccent: 'আবার!',
+    headline: 'স্মার্ট। সহজ। গোছানো।',
+    copy: 'মিল ট্র্যাক করুন, খরচ ব্যবস্থাপনা করুন, সহজেই মেসের হিসাব নিয়ন্ত্রণে রাখুন।',
+    tagline: 'চালিয়ে যেতে আপনার ফোন নম্বর ও পিন দিন।',
+    phoneLabel: 'আপনার ফোন নম্বর', phonePlaceholder: 'ফোন নম্বর লিখুন',
+    pinLabel: 'আপনার পিন', pinPlaceholder: '৪-সংখ্যার পিন',
+    remember: 'এই ডিভাইসে মনে রাখুন', forgotPin: 'পিন ভুলে গেছেন?',
+    signIn: 'সাইন ইন', or: 'অথবা', needHelp: 'সাহায্য দরকার?',
+    footnote: 'সমস্যা হলে আপনার মেস অ্যাডমিনের সাথে যোগাযোগ করুন।', footnoteBold: 'মেস অ্যাডমিন'
+  }
+};
+function setLoginLang(lang) {
+  _loginLang = LOGIN_I18N[lang] ? lang : 'en';
+  renderLogin();
+}
+
 function renderLogin() {
   hideBootLoader();
   const s = document.getElementById('login-screen');
@@ -219,27 +335,68 @@ function renderLogin() {
       </div>`;
     return;
   }
+  const t = LOGIN_I18N[_loginLang];
   s.innerHTML = `
-    <div class="login-card">
-      <div class="login-brand">
-        <div class="logo-dot"><img src="favicon.png" alt="" width="20" height="20" style="width:100%; height:100%; display:block; border-radius:inherit;"></div>
-        <div>
-          <h1>MessLedger</h1>
-          <div class="login-sub">Meal &amp; expense tracker</div>
-        </div>
+    <div class="login-lang-switcher">
+      <i class="fas fa-globe"></i>
+      <select onchange="setLoginLang(this.value)" aria-label="Language">
+        <option value="en" ${_loginLang === 'en' ? 'selected' : ''}>English</option>
+        <option value="bn" ${_loginLang === 'bn' ? 'selected' : ''}>বাংলা</option>
+      </select>
+      <i class="fas fa-chevron-down" style="font-size:9px;"></i>
+    </div>
+    <div class="login-shell">
+      <div class="login-illustration-panel">
+        ${loginHeroIconSvg()}
+        <h1>Mess<span class="brand-accent">Ledger</span></h1>
+        <div class="login-sub">${t.sub}</div>
+        <div class="login-illustration-headline">${t.headline}</div>
+        <p class="login-illustration-copy">${t.copy}</p>
+        ${loginIllustrationSvg()}
       </div>
-      <div class="login-tagline">${maintenanceOn ? 'Super Admin sign-in only — the app is under maintenance for everyone else.' : 'Enter your phone number and PIN to continue.'}</div>
-      <label>Your phone number</label>
-      <input type="tel" id="login-phone" inputmode="tel" placeholder="Enter your number" autocomplete="tel">
-      <label>Your PIN</label>
-      <input type="password" id="login-pin" inputmode="numeric" placeholder="4-digit PIN">
-      <div class="error-text" id="login-error"></div>
-      <button class="btn" id="login-btn" style="width:100%; text-align:center;">Sign In</button>
-      <div class="login-links">
-        ${maintenanceOn ? '<button class="link-btn subtle" onclick="toggleMaintenanceLoginForm()">Back</button>' : '<button class="link-btn subtle" onclick="forgotPin()">Forgot PIN?</button>'}
+      <div class="login-card">
+        <div class="login-mobile-brand">
+          ${loginHeroIconSvg()}
+          <h1>Mess<span class="brand-accent">Ledger</span></h1>
+          <div class="login-sub">${t.sub}</div>
+        </div>
+        <div class="login-desktop-heading"><h2>${t.welcome} <span>${t.welcomeAccent}</span></h2></div>
+        ${maintenanceOn ? '' : `<div class="login-shield-divider"><span></span><i class="fas fa-shield-halved"></i><span></span></div>`}
+        <div class="login-tagline">${maintenanceOn ? 'Super Admin sign-in only — the app is under maintenance for everyone else.' : t.tagline}</div>
+        <label><i class="fas fa-phone" style="color:var(--primary); font-size:11px; margin-right:6px;"></i>${t.phoneLabel}</label>
+        <div class="login-phone-group">
+          <span class="login-phone-code">+880</span>
+          <input type="tel" id="login-phone" inputmode="tel" placeholder="${t.phonePlaceholder}" autocomplete="tel">
+        </div>
+        <label style="margin-top:12px;"><i class="fas fa-lock" style="color:var(--primary); font-size:11px; margin-right:6px;"></i>${t.pinLabel}</label>
+        <div class="login-pin-group input-icon-group">
+          <i class="fas fa-grip"></i>
+          <input type="password" id="login-pin" inputmode="numeric" placeholder="${t.pinPlaceholder}" autocomplete="current-password">
+          <button type="button" class="login-pin-toggle" id="login-pin-toggle" aria-label="Show PIN"><i class="fas fa-eye"></i></button>
+        </div>
+        <div class="error-text" id="login-error"></div>
+        <div class="login-row-between">
+          <label class="login-remember"><input type="checkbox" id="login-remember" checked> ${t.remember}</label>
+          ${maintenanceOn ? '' : `<button class="link-btn subtle" onclick="forgotPin()">${t.forgotPin}</button>`}
+        </div>
+        <button class="btn" id="login-btn" style="width:100%; text-align:center;"><i class="fas fa-right-to-bracket"></i> ${t.signIn}</button>
+        ${maintenanceOn ? `<div class="login-links"><button class="link-btn subtle" onclick="toggleMaintenanceLoginForm()">Back</button></div>` : `
+        <div class="login-or-divider"><span></span>${t.or}<span></span></div>
+        <div class="login-help-btn-row"><button class="link-btn subtle" onclick="showLoginHelp()"><i class="fas fa-circle-question"></i> ${t.needHelp}</button></div>
+        <button class="btn secondary login-mobile-forgot" style="width:100%; text-align:center;" onclick="forgotPin()"><i class="fas fa-circle-question"></i> ${t.forgotPin}</button>
+        <div class="login-footnote">${t.footnote.replace(t.footnoteBold, '<b>' + t.footnoteBold + '</b>')}</div>`}
       </div>
     </div>`;
   document.getElementById('login-btn').addEventListener('click', doLogin);
+  const pinToggleBtn = document.getElementById('login-pin-toggle');
+  if (pinToggleBtn) pinToggleBtn.addEventListener('click', () => {
+    const pinInput = document.getElementById('login-pin');
+    const icon = pinToggleBtn.querySelector('i');
+    const showing = pinInput.type === 'text';
+    pinInput.type = showing ? 'password' : 'text';
+    icon.className = showing ? 'fas fa-eye' : 'fas fa-eye-slash';
+    pinToggleBtn.setAttribute('aria-label', showing ? 'Show PIN' : 'Hide PIN');
+  });
 }
 // Resolves which member is trying to log in, by phone number. Shared by
 // doLogin() and forgotPin().
@@ -359,7 +516,8 @@ async function doLogin() {
     loginBtn.textContent = 'Signing in…';
   }
   try {
-    await enterAppWithFullData(m);
+    const rememberEl = document.getElementById('login-remember');
+    await enterAppWithFullData(m, { remember: rememberEl ? rememberEl.checked : true });
   } catch (err) {
     console.error('Failed to load full data after login:', err);
     hideBootLoader();
@@ -504,6 +662,7 @@ function logout() {
   }
   _listenerPausedForBackground = false;
   clearPersistedSession();
+  try { localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY); } catch (e) {}
   _maintenanceLoginFormOpen = false;
   if (notifPanelOpen) {
     notifPanelOpen = false;

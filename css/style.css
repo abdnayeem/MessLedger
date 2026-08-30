@@ -245,45 +245,203 @@ button:focus-visible, .tab-btn:focus-visible, .link-btn:focus-visible, a:focus-v
 @keyframes boot-spin{to{transform:rotate(360deg);}}
 
 /* ---------- 4. Login screen ---------- */
+/* Purple/indigo palette, scoped ONLY to #login-screen by redefining these
+   custom properties here — every login-specific rule below (and .btn,
+   since it already reads var(--primary) globally) inherits these new
+   values as long as it's a descendant of #login-screen, while the rest of
+   the app (Dashboard, Meals, etc.) keeps its normal teal/coral theme
+   untouched. This is deliberately NOT a global recolor. */
 #login-screen{
+  --primary:#5B4FE0; --primary-dark:#4636C7; --primary-bg:#EEECFC;
+  --accent:#8B7CF6; --accent-dark:#6F5EEA; --accent-bg:#F1EEFD;
+  position:relative;
   width:100%; min-height:100dvh; margin:0 auto;
   display:flex; align-items:center; justify-content:center;
-  padding:calc(24px + var(--safe-t)) 18px 32px;
+  padding:calc(6px + var(--safe-t)) 14px 10px;
 }
 #login-screen:empty{display:none;}
+
+.login-lang-switcher{
+  position:absolute; top:calc(14px + var(--safe-t)); right:16px; z-index:2;
+  display:flex; align-items:center; gap:6px; padding:7px 10px;
+  background:var(--surface); border:1px solid var(--border); border-radius:999px;
+  font-size:12px; font-weight:600; color:var(--ink-soft); box-shadow:var(--shadow-sm);
+}
+.login-lang-switcher i:first-child{color:var(--primary); font-size:12px;}
+.login-lang-switcher select{
+  border:none; background:transparent; padding:0 2px; font:inherit; color:inherit;
+  appearance:none; -webkit-appearance:none; cursor:pointer; max-width:64px;
+}
+.login-lang-switcher i:last-child{color:var(--ink-faint);}
+
+/* Outer shell: on mobile it's just the form card; on desktop (>=900px,
+   see below) it grows into a two-panel layout with the illustration on
+   the left and the form on the right, inside one rounded container. */
+.login-shell{
+  width:100%; max-width:400px; margin:0 auto;
+  display:flex; flex-direction:column;
+  border-radius:20px; overflow:hidden; box-shadow:var(--shadow-lg);
+  background:var(--surface);
+}
+.login-illustration-panel{display:none;} /* shown only at the desktop breakpoint */
+
 .login-card{
-  position:relative; overflow:hidden; width:100%; max-width:400px;
+  position:relative; overflow:hidden; width:100%;
   background:var(--surface); border:1px solid var(--border); border-radius:20px;
-  padding:30px 22px 26px;
+  padding:16px 16px 14px;
   box-shadow:var(--shadow-lg);
 }
+.login-shell .login-card{border-radius:0; border:none; box-shadow:none;} /* shell already has the rounding/shadow */
 .login-card::before{
   content:""; position:absolute; top:0; left:0; right:0; height:5px;
   background:linear-gradient(90deg, var(--primary), var(--accent));
 }
-.login-brand{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
-.login-brand .logo-dot{
-  width:42px; height:42px; border-radius:13px;
-  background:linear-gradient(135deg, var(--primary), #4A82A8);
-  box-shadow:0 8px 16px -6px rgba(51,96,127,.45);
+.login-card h1, .login-illustration-panel h1{font-family:'Space Grotesk', sans-serif; font-size:23px; font-weight:700; color:var(--ink);}
+.login-card h1 .brand-accent, .login-illustration-panel h1 .brand-accent{color:var(--primary);}
+.login-sub{color:var(--ink-soft); font-size:12px; margin-top:1px;}
+.login-card label{margin:5px 0 3px; display:flex; align-items:center;} /* tighter than the app-wide 14px/5px label spacing, mobile-only card */
+
+/* Mobile brand block: icon-on-top, centered — see login-mobile-brand vs
+   login-desktop-heading toggle in the min-width:900px block below. */
+.login-brand, .login-mobile-brand{display:flex; flex-direction:column; align-items:center; text-align:center; gap:1px; margin-bottom:6px;}
+.login-brand .logo-dot, .login-mobile-brand .logo-dot{
+  width:34px; height:34px; border-radius:11px; margin-bottom:4px;
+  background:linear-gradient(135deg, var(--primary), var(--accent));
+  box-shadow:0 8px 16px -6px rgba(91,79,224,.45);
   color:#fff; display:flex; align-items:center; justify-content:center;
   font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:19px; flex-shrink:0;
 }
-.login-card h1{font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:700;}
-.login-sub{color:var(--ink-soft); font-size:12.5px; margin-top:1px;}
-.login-tagline{color:var(--ink-soft); font-size:13.5px; margin-bottom:20px; line-height:1.5;}
+.login-desktop-heading{display:none;} /* shown only at the desktop breakpoint, replaces the brand block there */
+.login-desktop-heading h2{font-family:'Space Grotesk', sans-serif; font-size:24px; font-weight:700; margin:0 0 4px; color:var(--ink);}
+.login-desktop-heading h2 span{color:var(--primary);}
+
+.login-shield-divider{display:flex; align-items:center; gap:10px; margin:2px 0 6px; color:var(--primary);}
+.login-shield-divider span{flex:1; height:1px; background:var(--border);}
+.login-shield-divider i{font-size:12px; flex-shrink:0;}
+
+.login-tagline{color:var(--ink-soft); font-size:12.5px; margin-bottom:6px; line-height:1.35; text-align:center;}
 
 .input-icon-group{position:relative;}
 .input-icon-group i{
   position:absolute; left:13px; top:50%; transform:translateY(-50%);
-  color:var(--ink-faint); font-size:13px; pointer-events:none;
+  color:var(--primary); font-size:13px; pointer-events:none;
 }
-.input-icon-group input, .input-icon-group select{padding-left:36px;}
+.login-card .input-icon-group input, .login-card .input-icon-group select{padding-left:36px !important;}
 
-.login-links{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap;}
-.login-links-divider{color:var(--border);}
+/* Phone field: a fixed "+880" badge on the left and a faint decorative
+   phone icon on the right, sharing one bordered container. */
+.login-phone-group{
+  display:flex; align-items:stretch; border:1px solid var(--border);
+  border-radius:var(--radius-sm); overflow:hidden; background:var(--surface);
+}
+.login-phone-group:focus-within{border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-bg);}
+.login-phone-code{
+  display:flex; align-items:center; padding:0 12px; background:var(--primary-bg);
+  color:var(--primary); font-weight:700; font-size:13.5px; flex-shrink:0; user-select:none;
+}
+.login-phone-group input{border:none; border-radius:0; padding:11px 13px; flex:1; min-width:0;}
+.login-phone-group input:focus{box-shadow:none;}
+.login-hero-svg{width:100%; max-width:150px; height:auto; margin-bottom:2px;}
+
+/* PIN field: keypad icon on the left (via .input-icon-group), eye-icon
+   show/hide toggle on the right, sitting inside the same bordered box. */
+.login-pin-group{position:relative;}
+.login-pin-group input{padding-right:40px;}
+.login-pin-toggle{
+  position:absolute; right:4px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; border:none; background:transparent; cursor:pointer;
+  color:var(--ink-faint); display:flex; align-items:center; justify-content:center; font-size:14px;
+  border-radius:8px;
+}
+.login-pin-toggle:hover{color:var(--primary); background:var(--primary-bg);}
+
+.login-card .error-text{margin-top:4px; min-height:0;}
+.login-links{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px; flex-wrap:wrap;}
+.login-row-between{display:none; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 10px; flex-wrap:wrap;} /* desktop-only, see breakpoint */
+.login-remember{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-soft); cursor:pointer; user-select:none;}
+.login-remember input{width:15px; height:15px; margin:0; accent-color:var(--primary); cursor:pointer;}
+
+.login-or-divider{display:flex; align-items:center; gap:10px; margin:8px 0; color:var(--ink-faint); font-size:11.5px;}
+.login-or-divider span{flex:1; height:1px; background:var(--border);}
+/* .btn (defined later, in section 5) carries a global margin-top:18px meant
+   for normal in-page buttons — way too much on a height-constrained mobile
+   login card (it was silently adding 18px before Sign In AND another 18px
+   before the mobile Forgot-PIN button = 36px of the scrolling problem on
+   its own). ".login-card .btn" outranks plain ".btn" on specificity
+   regardless of file order, so this reliably wins. */
+.login-card .btn{margin-top:8px;}
+.login-mobile-forgot{margin-top:6px; background:var(--primary-bg) !important; color:var(--primary) !important; border-color:var(--primary-bg) !important; box-shadow:none !important;} /* mobile-only, see breakpoint */
+.login-help-btn-row{display:none; justify-content:center; margin-top:2px;} /* desktop-only, see breakpoint */
 .link-btn.subtle{color:var(--ink-faint); font-weight:500;}
 .link-btn.subtle:hover{color:var(--primary);}
+.login-footnote{display:none; text-align:center; color:var(--ink-faint); font-size:11px; margin-top:8px;} /* desktop-only, see breakpoint */
+.login-footnote b{color:var(--ink-soft); font-weight:700;}
+
+/* Comfortable, roomier spacing + the mobile-vs-desktop content swap once
+   the desktop split-panel shell kicks in — the compact single-column
+   mobile layout above hides the remember-me/need-help/footnote block
+   (shown here) and instead shows a plain full-width "Forgot PIN?" button
+   after the "or" divider (hidden here), matching each breakpoint's own
+   reference layout. */
+@media (min-width:900px){
+  .login-card{padding:38px 34px 32px;}
+  .login-card h1{font-size:19px;}
+  .login-sub{font-size:12.5px;}
+  .login-card label{margin:14px 0 5px;}
+  .login-mobile-brand{display:none;}
+  .login-desktop-heading{display:block;}
+  .login-shield-divider{margin:6px 0 14px;}
+  .login-tagline{font-size:13.5px; margin-bottom:20px; line-height:1.5; text-align:left;}
+  .login-card .error-text{margin-top:8px; min-height:16px;}
+  .login-card .btn{margin-top:18px;}
+  .login-or-divider{margin:14px 0;}
+  .login-row-between{display:flex; margin:2px 0 16px;}
+  .login-remember{font-size:13px;}
+  .login-mobile-forgot{display:none;}
+  .login-help-btn-row{display:flex;}
+  .login-footnote{display:block; font-size:11.5px; margin-top:14px;}
+}
+
+/* ---------- 4b. Login illustration panel (desktop only, see breakpoint below) ---------- */
+.login-illustration-panel{
+  padding:36px 30px; flex-direction:column; align-items:center; text-align:center;
+  background:
+    radial-gradient(circle at 15% 15%, var(--primary-bg) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, var(--accent-bg) 0%, transparent 45%),
+    var(--surface-alt);
+  border-right:1px solid var(--border);
+}
+.login-illustration-panel .login-hero-svg{max-width:110px; margin-bottom:8px;}
+.login-illustration-panel h1{font-size:23px; margin-bottom:2px;}
+.login-illustration-panel .login-sub{margin-bottom:14px;}
+.login-illustration-headline{font-weight:700; font-size:15px; margin:6px 0 6px; color:var(--ink);}
+.login-illustration-copy{color:var(--ink-soft); font-size:12.5px; line-height:1.55; max-width:230px; margin:0 0 24px;}
+.login-illustration-svg{width:100%; max-width:220px; height:auto;}
+
+/* Extra safety net for genuinely short viewports (small phones, or any
+   phone in landscape) — shrinks the decorative bits a bit further so the
+   card still fits without scrolling even when there isn't much height to
+   begin with. Never touches input/button height (kept at 46px — shrinking
+   tap targets below ~44px hurts usability more than a few saved pixels
+   help), only spacing and non-essential decoration. */
+@media (max-height:700px) and (max-width:899px){
+  #login-screen{padding:calc(4px + var(--safe-t)) 14px 6px;}
+  .login-card{padding:12px 16px 12px;}
+  .login-brand, .login-mobile-brand{margin-bottom:4px;}
+  .login-hero-svg{max-width:64px;}
+  .login-card h1{font-size:16px;}
+  .login-shield-divider{margin:0 0 4px;}
+  .login-tagline{margin-bottom:4px;}
+  .login-card label{margin:4px 0 2px;}
+  .login-or-divider{margin:6px 0;}
+  .login-card .btn{margin-top:6px;}
+}
+
+@media (min-width:900px){
+  .login-shell{max-width:760px; flex-direction:row; align-items:stretch;}
+  .login-illustration-panel{display:flex; flex:0 0 46%; justify-content:center;}
+  .login-shell .login-card{flex:1 1 54%; padding:38px 34px 32px; display:flex; flex-direction:column; justify-content:center;}
+}
 
 /* ---------- 5. Buttons, inputs, forms ---------- */
 select, input[type=text], input[type=password], input[type=number], input[type=date], input[type=month], input[type=tel]{
@@ -460,7 +618,7 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
 .main-col{display:flex; flex-direction:column; flex:1; min-width:0; width:100%;}
 
 /* ---------- 7. Navigation: bottom bar (phones) → sidebar (desktop) ---------- */
-.layout{display:flex; gap:20px; align-items:flex-start; padding:0 12px 0 0;}
+.layout{display:flex; gap:20px; align-items:flex-start; padding:0 12px;}
 
 /* Sidebar card wraps the logo/branding + nav menu into one container on
    desktop. On phones it renders as if it weren't there at all
@@ -538,22 +696,16 @@ label{display:block; font-size:0.8125rem; font-weight:600; color:var(--ink-soft)
    the tab-bar bubble finish settling at the same moment instead of one
    visibly lagging the other — that mismatch (previously 300ms content vs
    420ms tab bubble) was part of what made the switch feel uncoordinated. */
-.tab-content-anim{animation:tab-content-in 420ms var(--ease); will-change:opacity, transform;}
-@keyframes tab-content-in{
-  from{opacity:0; transform:translateY(5px);}
-  to{opacity:1; transform:translateY(0);}
-}
-/* Quick fade+settle *out* of the current tab's content, played for 150ms
-   before setTab() swaps in the new tab (see 07-ui-shell.js — the JS
-   setTimeout there must match this duration exactly). Without this the
-   old content vanished the same instant the new content appeared, so the
-   entrance animation had nothing to visually continue from and read as an
-   abrupt snap rather than a switch. */
-.tab-content-leaving{animation:tab-content-out 150ms var(--ease) forwards; will-change:opacity, transform;}
-@keyframes tab-content-out{
-  from{opacity:1; transform:translateY(0);}
-  to{opacity:0; transform:translateY(-3px);}
-}
+/* Tab switches now swap #content instantly (no fade/flash) — see setTab()
+   in 07-ui-shell.js. The .tab-content-anim/.tab-content-leaving classes are
+   still added by that code (kept as harmless no-op hooks in case a future
+   change wants a transition back), but with no animation rule attached
+   here they do nothing, so switching tabs is a plain instant swap. A brief
+   opacity fade-to-0-then-back-to-1 was tried here first, but because
+   #content is a single element (old content removed, then new content
+   written in) rather than two overlapping layers, that read as a flicker
+   — the screen visibly going blank for an instant — rather than a smooth
+   crossfade, so it was removed rather than tuned further. */
 
 /* ---------- 7b. Mobile bottom tab bar + "More" sheet ----------
    Redesign of the phone navigation: instead of every tab (up to 11 for a
@@ -747,10 +899,7 @@ body.more-sheet-locked{overflow:hidden;}
 .card-header-row{margin:-4px -4px 16px; padding:2px 4px 16px; border-bottom:1px solid var(--border);}
 .card-header-row h2{margin-bottom:0;}
 
-.alert-card{border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; border:1px solid; border-left-width:4px;}
-.alert-card.danger{background:var(--danger-bg); border-color:var(--border-danger-tint); border-left-color:var(--danger);}
-.alert-card.warning{background:var(--warning-bg); border-color:var(--border-warning-tint); border-left-color:var(--warning);}
-.alert-card.success{background:var(--success-bg); border-color:var(--border-primary-tint); border-left-color:var(--success);}
+.alert-card{background:var(--surface); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; border:1px solid var(--border); box-shadow:var(--shadow-sm);}
 .alert-card b{font-size:14px;}
 /* Slide-in-from-the-right entrance for the tomorrow-meal reminder banner
    (see tomorrowMealBannerHtml() in 09-dashboard.js) — a plain fade-in
@@ -993,7 +1142,7 @@ tbody tr:hover{background:var(--surface-alt);}
 .msched-assign-btn i{margin-right:6px;}
 .msched-filter-toggle-btn{
   width:40px; height:40px; flex-shrink:0; border-radius:var(--radius-sm);
-  border:1px solid var(--border); background:var(--card-bg,#fff); color:var(--ink-soft);
+  border:1px solid var(--border); background:var(--surface); color:var(--ink-soft);
   display:flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer;
 }
 .msched-filter-toggle-btn:hover{background:var(--surface-alt); color:var(--primary);}
@@ -1683,7 +1832,7 @@ tbody tr:hover{background:var(--surface-alt);}
   .card{padding:20px;}
   .topbar{padding:14px 20px;}
   .month-bar{padding:10px 20px;}
-  .layout{padding:0 20px 0 0;}
+  .layout{padding:0 20px;}
 }
 
 /* Desktop: sidebar navigation replaces the bottom bar */

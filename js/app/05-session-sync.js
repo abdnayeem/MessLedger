@@ -52,14 +52,22 @@ function computeSessionExpiry() {
   return Date.now() + sessionInactivityMs();
 }
 
-function persistSession(m) {
+function persistSession(m, remember) {
   try {
     // Every role now persists the same way, in localStorage with a normal
     // expiry — previously superadmin used sessionStorage only, which the
     // browser wipes the moment it's closed (not just refreshed), forcing a
     // fresh login every time. Members/admins never had that problem since
     // they already used localStorage; superadmin now behaves the same way.
-    sessionExpiresAt = computeSessionExpiry();
+    //
+    // "Remember me" (login screen checkbox) deliberately does NOT switch
+    // back to sessionStorage for the unchecked case — that's exactly the
+    // bug described above. Unchecking it just shortens the localStorage
+    // expiry to a single day instead of the normal sessionInactivityDays,
+    // so a shared/borrowed device signs itself out sooner without
+    // reintroducing "wiped the instant the browser closes".
+    remember = remember !== false; // default true when omitted, for back-compat
+    sessionExpiresAt = remember ? computeSessionExpiry() : Date.now() + 24 * 60 * 60 * 1000;
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId: m.id,
       role: m.role,

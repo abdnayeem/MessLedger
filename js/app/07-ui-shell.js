@@ -360,21 +360,15 @@ function scrollContentToTop() {
   window.scrollTo(0, 0);
 }
 async function setTab(id) {
-  // Quick crossfade-out of whatever's currently in #content before we
-  // swap tabs. Scoped to setTab (not renderTabContent itself) on purpose:
-  // renderTabContent() is also called from dozens of places elsewhere
-  // (every meal/expense/deposit edit re-renders the current tab to reflect
-  // the change) and those in-place updates should stay instant — only an
-  // actual tab switch should pay the small fade delay below. Without this,
-  // the old tab's content was replaced by the new tab's content in the
-  // same synchronous tick, so the "fade in" of the new content had nothing
-  // to fade in *from* — it just snapped, which is what read as a jhaki.
-  const outgoing = id !== activeTab ? document.getElementById('content') : null;
-  if (outgoing && outgoing.childNodes.length) {
-    outgoing.classList.add('tab-content-leaving');
-    await new Promise(res => setTimeout(res, 150));
-  }
+  // Tab switches used to fade the old content out (150ms), then fade the
+  // new content in (420ms), later tuned to a quicker opacity-only crossfade
+  // (90ms/140ms) — but since #content is a single element (old content
+  // removed, new content written in), any fade-to-0-then-back-to-1 shows a
+  // genuinely blank instant in between, which read as a flicker rather
+  // than a smooth transition. Switching to a plain instant swap instead —
+  // see css/style.css's .tab-content-anim/.tab-content-leaving comment.
   activeTab = id;
+  try { localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, id); } catch (e) {}
   if (moreSheetOpen) closeMoreSheet();
   if (id !== 'members') _maDirty = false;
   if (id !== 'settings') _adminMonthAccessDraft = null; // force a fresh draft next time Settings is opened
@@ -440,7 +434,6 @@ async function setTab(id) {
 
 function renderTabContent(animate) {
   if (animate === undefined) animate = false;
-  console.time('renderTabContent');
   renderTopWho();
   const c = document.getElementById('content');
   if (activeTab === 'dashboard') {
@@ -502,7 +495,6 @@ function renderTabContent(animate) {
     void c.offsetWidth;
     c.classList.add('tab-content-anim');
   }
-  console.timeEnd('renderTabContent');
 }
 
 /* ---------------- CALC HELPERS ---------------- */

@@ -106,24 +106,30 @@ let historyExpenseSearch = '';
 // which already holds this for the "View Details" buttons.
 let _histMealRowsCache = [];
 
-function setHistoryGrocerySearch(val) {
-  historyGrocerySearch = val;
+const _debouncedHistoryGrocerySearchRender = debounce(() => {
   renderTabContent();
   const el = document.getElementById('history-grocery-search');
   if (el) {
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }
+}, 180);
+function setHistoryGrocerySearch(val) {
+  historyGrocerySearch = val;
+  _debouncedHistoryGrocerySearchRender();
 }
 
-function setHistoryExpenseSearch(val) {
-  historyExpenseSearch = val;
+const _debouncedHistoryExpenseSearchRender = debounce(() => {
   renderTabContent();
   const el = document.getElementById('history-expense-search');
   if (el) {
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }
+}, 180);
+function setHistoryExpenseSearch(val) {
+  historyExpenseSearch = val;
+  _debouncedHistoryExpenseSearchRender();
 }
 
 // Small colored icon-card used for the four top stat tiles (Grocery Deductions /

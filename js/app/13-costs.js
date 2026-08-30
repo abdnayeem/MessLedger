@@ -128,15 +128,18 @@ function setCostsSort(key) {
   renderTabContent();
 }
 
-function setCostsSearch(val) {
-  costsSearch = val;
-  costsPage = 1;
+const _debouncedCostsSearchRender = debounce(() => {
   renderTabContent();
   const el = document.getElementById('costs-search');
   if (el) {
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }
+}, 180);
+function setCostsSearch(val) {
+  costsSearch = val;
+  costsPage = 1;
+  _debouncedCostsSearchRender();
 }
 
 function renderCosts() {
