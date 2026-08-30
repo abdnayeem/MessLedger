@@ -23,14 +23,21 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MessLedger">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
 <title>MessLedger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
+<noscript>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</noscript>
 <link rel="stylesheet" href="css/style.css">
 <style>
   /* Inline critical CSS so a loading state shows immediately, before the
@@ -239,5 +246,41 @@
      bundle.js after. -->
 <script defer src="js/app/bundle.js"></script>
 <script defer src="js/responsive-tables.js"></script>
+<script>
+  // Register the service worker (app shell caching + installability).
+  // Runs after full load so it never competes with the app's own boot
+  // work for bandwidth/CPU on first paint.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (err) {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
+
+  // Visible online/offline indicator, so it's obvious which mode the app
+  // is currently running in. Reuses the app's own toast system
+  // (showToast, defined in js/app/bundle.js) when it's ready; falls back
+  // to a console log for the rare case a toast fires before bundle.js has
+  // finished loading (e.g. an "offline" event firing during initial boot).
+  (function () {
+    function announceConnectivity(isOnline) {
+      var msg = isOnline ? 'Back online' : 'You’re offline — showing saved data';
+      if (typeof showToast === 'function') {
+        showToast(msg, isOnline ? 'success' : 'error');
+      } else {
+        console.log('[MessLedger]', msg);
+      }
+    }
+    window.addEventListener('online', function () { announceConnectivity(true); });
+    window.addEventListener('offline', function () { announceConnectivity(false); });
+    // If the page itself was loaded while offline, say so once boot finishes.
+    if (!navigator.onLine) {
+      window.addEventListener('load', function () {
+        setTimeout(function () { announceConnectivity(false); }, 600);
+      });
+    }
+  })();
+</script>
 </body>
 </html>
