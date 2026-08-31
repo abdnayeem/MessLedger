@@ -144,7 +144,24 @@
   @media (prefers-reduced-motion:reduce){
     #boot-loader *{animation-duration:.001ms !important; animation-iteration-count:1 !important;}
     .skel-block::after{animation:none; display:none;}
-  }
+  }  /* Custom "Install app" banner (replaces relying on the browser's own
+     install-menu entry) — purely presentational, no app data/logic
+     involved. See the script near the end of <body> for the show/hide
+     behavior (beforeinstallprompt on Android/Chrome, manual instructions
+     on iOS Safari where a programmatic install prompt doesn't exist). */
+  .pwa-install-banner{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h,56px) + var(--safe-b,0px) + 10px);z-index:250;display:none;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:linear-gradient(135deg,#5B4FE0,#2E5DE8);color:#fff;box-shadow:0 10px 30px -8px rgba(46,93,232,.45);opacity:0;transform:translateY(16px);transition:opacity .25s ease,transform .25s ease;max-width:480px;margin:0 auto;font-family:Inter,sans-serif}
+  .pwa-install-banner.pib-show{display:flex}
+  .pwa-install-banner.pib-show.pib-in{opacity:1;transform:translateY(0)}
+  .pib-icon{flex-shrink:0;width:36px;height:36px;border-radius:10px;overflow:hidden;background:#fff;display:flex;align-items:center;justify-content:center}
+  .pib-icon img{width:26px;height:26px}
+  .pib-text{flex:1;min-width:0}
+  .pib-title{font-weight:700;font-size:13.5px}
+  .pib-sub{font-size:11.5px;opacity:.9;margin-top:2px;line-height:1.3}
+  .pib-actions{display:flex;gap:8px;flex-shrink:0}
+  .pib-install-btn,.pib-later-btn{border:none;border-radius:9px;font-weight:700;font-size:12.5px;cursor:pointer;padding:8px 14px;-webkit-tap-highlight-color:transparent}
+  .pib-install-btn{background:#fff;color:#33607F}
+  .pib-later-btn{background:rgba(255,255,255,.18);color:#fff;font-weight:600;padding:8px 12px}
+  @media (max-width:380px){.pib-sub{display:none}}
 </style>
 </head>
 <body>
@@ -165,6 +182,21 @@
       <div class="skel-block bl-skel-row short"></div>
       <div class="skel-block bl-skel-row"></div>
     </div>
+  </div>
+</div>
+<!-- Custom install banner — hidden by default; shown by the script near the
+     end of <body> only when the browser reports the app is actually
+     installable (or, on iOS, always offered manually since iOS has no
+     installability signal to check). -->
+<div id="pwa-install-banner" class="pwa-install-banner" role="dialog" aria-label="Install MessLedger">
+  <div class="pib-icon"><img src="favicon.png" alt=""></div>
+  <div class="pib-text">
+    <div class="pib-title">Install MessLedger</div>
+    <div class="pib-sub">Add it to your home screen for faster access.</div>
+  </div>
+  <div class="pib-actions">
+    <button type="button" class="pib-install-btn" id="pib-install-btn">Install</button>
+    <button type="button" class="pib-later-btn" id="pib-later-btn">Later</button>
   </div>
 </div>
 <div id="app">
@@ -280,6 +312,89 @@
         setTimeout(function () { announceConnectivity(false); }, 600);
       });
     }
+  })();
+</script>
+<script>
+  // Custom "Install app" banner. Fully self-contained — doesn't touch
+  // bundle.js, Firestore, or any app data. Two paths:
+  //   - Android/Chrome/Edge: the browser fires 'beforeinstallprompt' when
+  //     it decides the page is installable; we intercept that (so the
+  //     browser's own mini-infobar never shows) and show our own banner
+  //     instead. Tapping "Install" replays the browser's real native
+  //     prompt() — this can't be faked or skipped, it's the same
+  //     permission dialog the browser would show either way, just
+  //     triggered from our button instead of a menu.
+  //   - iOS Safari: there is no 'beforeinstallprompt' event at all — iOS
+  //     never tells a page it's installable, and there's no API to trigger
+  //     the install programmatically. So on iOS this banner just shows
+  //     manual instructions instead ("Share -> Add to Home Screen") when
+  //     tapped, since that's the only way to install there.
+  (function () {
+    var STORAGE_KEY = 'pwaInstallBannerDismissedAt';
+    var DISMISS_DAYS = 7; // don't nag again for a week after "Later"
+    var banner = document.getElementById('pwa-install-banner');
+    var installBtn = document.getElementById('pib-install-btn');
+    var laterBtn = document.getElementById('pib-later-btn');
+    if (!banner || !installBtn || !laterBtn) return;
+
+    function isStandalone() {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+             window.navigator.standalone === true; // legacy iOS flag
+    }
+    function recentlyDismissed() {
+      try {
+        var t = localStorage.getItem(STORAGE_KEY);
+        return !!t && (Date.now() - parseInt(t, 10)) < DISMISS_DAYS * 24 * 60 * 60 * 1000;
+      } catch (e) { return false; }
+    }
+    function dismiss() {
+      banner.classList.remove('pib-in');
+      setTimeout(function () { banner.classList.remove('pib-show'); }, 250);
+      try { localStorage.setItem(STORAGE_KEY, String(Date.now())); } catch (e) {}
+    }
+    function showBanner() {
+      if (isStandalone() || recentlyDismissed()) return;
+      banner.classList.add('pib-show');
+      // Two nested rAFs so the browser actually paints the display:flex
+      // state first — without this the opacity/transform transition below
+      // has nothing to transition FROM and just snaps in instantly.
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { banner.classList.add('pib-in'); });
+      });
+    }
+
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      showBanner();
+    });
+    // Already installed (via our banner OR the browser's own menu) —
+    // make sure the banner isn't left showing in either case.
+    window.addEventListener('appinstalled', dismiss);
+
+    var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS && !isStandalone() && !recentlyDismissed()) {
+      setTimeout(showBanner, 2000); // small delay so it doesn't fight the boot loader for attention
+    }
+
+    laterBtn.addEventListener('click', dismiss);
+    installBtn.addEventListener('click', function () {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.finally(function () {
+          deferredPrompt = null;
+          dismiss();
+        });
+      } else if (isIOS) {
+        var msg = 'Tap the Share icon, then "Add to Home Screen"';
+        if (typeof showToast === 'function') showToast(msg, 'success');
+        else alert(msg);
+        dismiss();
+      } else {
+        dismiss();
+      }
+    });
   })();
 </script>
 </body>

@@ -3,66 +3,107 @@
 // App entry (enterApp/hideBootLoader), login screen + doLogin/forgotPin, device detection, login/action logs, logout, PIN change + forced-PIN modal
 // ---------------------------------------------------------------------------
 function enterApp(m, opts) {
-  hideBootLoader();
   opts = opts || {};
-  session = {
-    userId: m.id,
-    role: m.role
-  };
-  sessionExpiresAt = opts.expiresAt || computeSessionExpiry();
-  if (opts.persist !== false) persistSession(m, opts.remember);
-  // Notifications aren't part of the full-state fetch above anymore (see
-  // loadNotifications() in 02-state-storage.js) — fetch this member's own
-  // on login so the bell isn't empty until the next scheduler tick/bell-open.
-  // runScheduledNotificationChecks() is deliberately chained AFTER the fetch
-  // resolves, not fired in parallel with it — those checks dedupe by
-  // scanning state.notifications in memory, so running them before the
-  // fetch lands (against a still-empty array) could create a genuine
-  // duplicate of a reminder that already exists on the server. (They're
-  // also individually gated behind the same "have we loaded yet" flag as a
-  // second line of defense — see _notifBaselineLoaded in 01-notifications.js.)
-  loadNotifications().then(() => {
-    runScheduledNotificationChecks();
-    if (session && session.userId) renderTopWho();
-  }).catch(e => console.error('loadNotifications (login) failed:', e));
-  startNotificationScheduler();
-  startRealtimeSync(); // moved here from bindActivityTracking() — only open the live listener once someone is actually signed in
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('main-screen').style.display = 'block';
-  // Resume on the last-visited tab after a page refresh / PWA relaunch of
-  // an already-signed-in session (opts.persist === false — see
-  // paintFromState() in 20-bootstrap.js), instead of always dropping back
-  // to Dashboard. A genuinely fresh manual login still starts on Dashboard
-  // as before. The saved tab is checked against tabsForRole() so a stale
-  // saved id that this role no longer has access to (e.g. saved while
-  // superadmin, role since changed) safely falls back to Dashboard too.
-  activeTab = 'dashboard';
-  if (opts.persist === false) {
-    let savedTab = null;
-    try { savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY); } catch (e) {}
-    if (savedTab && tabsForRole().some(t => t.id === savedTab)) activeTab = savedTab;
+  try {
+    session = {
+      userId: m.id,
+      role: m.role,
+      // Used by the force-logout kill switch (see forceLogoutAllUsers() in
+      // 18-settings-admin.js, and the checks in applyFreshState()/
+      // paintFromState()): a fresh manual login gets "now"; a resumed
+      // persisted session carries its ORIGINAL login time forward via
+      // opts.loginAt so a force-logout issued while this device was closed
+      // is still caught on the next resume, not silently bypassed.
+      loginAt: opts.loginAt || Date.now()
+    };
+    sessionExpiresAt = opts.expiresAt || computeSessionExpiry();
+    if (opts.persist !== false) persistSession(m, opts.remember);
+    // Notifications aren't part of the full-state fetch above anymore (see
+    // loadNotifications() in 02-state-storage.js) — fetch this member's own
+    // on login so the bell isn't empty until the next scheduler tick/bell-open.
+    // runScheduledNotificationChecks() is deliberately chained AFTER the fetch
+    // resolves, not fired in parallel with it — those checks dedupe by
+    // scanning state.notifications in memory, so running them before the
+    // fetch lands (against a still-empty array) could create a genuine
+    // duplicate of a reminder that already exists on the server. (They're
+    // also individually gated behind the same "have we loaded yet" flag as a
+    // second line of defense — see _notifBaselineLoaded in 01-notifications.js.)
+    loadNotifications().then(() => {
+      runScheduledNotificationChecks();
+      if (session && session.userId) renderTopWho();
+    }).catch(e => console.error('loadNotifications (login) failed:', e));
+    startNotificationScheduler();
+    startRealtimeSync(); // moved here from bindActivityTracking() — only open the live listener once someone is actually signed in
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'block';
+    // Resume on the last-visited tab after a page refresh / PWA relaunch of
+    // an already-signed-in session (opts.persist === false — see
+    // paintFromState() in 20-bootstrap.js), instead of always dropping back
+    // to Dashboard. A genuinely fresh manual login still starts on Dashboard
+    // as before. The saved tab is checked against tabsForRole() so a stale
+    // saved id that this role no longer has access to (e.g. saved while
+    // superadmin, role since changed) safely falls back to Dashboard too.
+    //
+    // Only actually restore it on a genuine RELOAD (F5 / pull-to-refresh) —
+    // not on a fresh app open (tapping the home-screen icon after fully
+    // closing the PWA, or opening a new browser tab to the site). Both
+    // events re-run this exact same JS from scratch, so they're otherwise
+    // indistinguishable from in here; performance.getEntriesByType('navigation')
+    // is what tells them apart — its type is 'reload' only for an actual
+    // refresh, 'navigate' for a fresh open. A relaunch after closing always
+    // starts on Dashboard, same as a genuinely fresh manual login.
+    activeTab = 'dashboard';
+    if (opts.persist === false) {
+      let navType = null;
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        navType = navEntries && navEntries[0] ? navEntries[0].type : null;
+      } catch (e) {}
+      if (navType === 'reload') {
+        let savedTab = null;
+        try { savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY); } catch (e) {}
+        if (savedTab && tabsForRole().some(t => t.id === savedTab)) activeTab = savedTab;
+      }
+    }
+    // Recompute on every login — see getCurrentMonthStr() comment above for why
+    // relying only on the value set when the script first loaded isn't enough.
+    currentMonth = getCurrentMonthStr();
+    const monthSelectEl = document.getElementById('month-select');
+    monthSelectEl.value = currentMonth;
+    if (!monthSelectEl._changeBound) {
+      monthSelectEl.addEventListener('change', (e) => {
+        currentMonth = e.target.value;
+        renderTabContent();
+      });
+      monthSelectEl._changeBound = true; // prevents duplicate listeners if enterApp() runs again (logout -> login again) without a full page reload
+    }
+    renderTopWho();
+    renderTabs();
+    renderTabContent(true);
+    startSessionCountdown();
+    // BUGFIX (blank white screen instead of the dashboard — most visible when
+    // opening the installed PWA fully offline with only a local cache to
+    // render from): hideBootLoader() used to be the very FIRST line of this
+    // function, removing the full-screen spinner before any of the work
+    // above had actually finished. If anything above threw (e.g. rendering
+    // against an edge-case in the offline local-cache snapshot), the spinner
+    // was already gone but #main-screen was never (or only partially) shown
+    // — nothing on screen at all, with the real error visible only in the
+    // console. Moving hideBootLoader() to here means the loader now stays up
+    // — covering the still-blank screen — right up until every line above
+    // has actually succeeded; the catch below shows a proper "Couldn't load
+    // / Reload" message (same UI already used elsewhere in this file) if
+    // anything failed instead of leaving a blank screen with no explanation.
+    hideBootLoader();
+    // Mandatory security gate: anyone still on the default PIN must change it
+    // before doing anything else. The app underneath has already rendered
+    // normally (existing behavior untouched) — this just locks it behind a
+    // non-dismissible overlay until the PIN is changed.
+    if (m.pin === DEFAULT_PIN) showForcedPinChangeModal(m.id);
+  } catch (err) {
+    console.error('enterApp failed:', err);
+    showBootError('Something went wrong while loading your dashboard: ' + (err && err.message ? err.message : String(err)));
   }
-  // Recompute on every login — see getCurrentMonthStr() comment above for why
-  // relying only on the value set when the script first loaded isn't enough.
-  currentMonth = getCurrentMonthStr();
-  const monthSelectEl = document.getElementById('month-select');
-  monthSelectEl.value = currentMonth;
-  if (!monthSelectEl._changeBound) {
-    monthSelectEl.addEventListener('change', (e) => {
-      currentMonth = e.target.value;
-      renderTabContent();
-    });
-    monthSelectEl._changeBound = true; // prevents duplicate listeners if enterApp() runs again (logout -> login again) without a full page reload
-  }
-  renderTopWho();
-  renderTabs();
-  renderTabContent(true);
-  startSessionCountdown();
-  // Mandatory security gate: anyone still on the default PIN must change it
-  // before doing anything else. The app underneath has already rendered
-  // normally (existing behavior untouched) — this just locks it behind a
-  // non-dismissible overlay until the PIN is changed.
-  if (m.pin === DEFAULT_PIN) showForcedPinChangeModal(m.id);
 }
 
 // `state` at this point may only be the lightweight login-screen data
