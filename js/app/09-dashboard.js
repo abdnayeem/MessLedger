@@ -403,6 +403,35 @@ function dismissTomorrowMealBanner() {
   try { localStorage.setItem(tomorrowMealReminderDismissKey(), '1'); } catch (e) {}
   renderTabContent();
 }
+// Quick "is my meal on today" glance card for the Dashboard — the only
+// other place this was visible before was your own highlighted row inside
+// the Meals tab's full member table, which meant opening a different tab
+// and scanning for your name every time just to check today's status.
+function todayMealStatusCardHtml() {
+  if (!session || !session.userId) return '';
+  const d = todayStr();
+  const rec = state.days[d] && state.days[d].meals && state.days[d].meals[session.userId];
+  const lunch = (rec && rec.lunch) || 0;
+  const dinner = (rec && rec.dinner) || 0;
+  const pill = (label, count) => `
+    <span class="badge" style="background:${count > 0 ? 'var(--success-bg)' : 'var(--danger-bg)'}; color:${count > 0 ? 'var(--success)' : 'var(--danger)'};">
+      ${label}: ${count > 0 ? `ON (${count})` : 'OFF'}
+    </span>`;
+  return `<div class="alert-card" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1 1 220px; min-width:0;">
+      <b><i class="fas fa-utensils"></i> Today's Meal</b>
+      <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+        ${pill('Lunch', lunch)}
+        ${pill('Dinner', dinner)}
+      </div>
+    </div>
+    <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px; flex:0 0 auto;" onclick="goToMealsForToday()">Edit</button>
+  </div>`;
+}
+function goToMealsForToday() {
+  mealSelectedDate = todayStr();
+  setTab('meals');
+}
 
 function renderDashboard() {
   const memberStatCards = [];
@@ -623,6 +652,7 @@ function renderDashboard() {
 
   return `
     ${tomorrowMealBannerHtml()}
+    ${todayMealStatusCardHtml()}
     ${banner}
     ${marketBox}
     ${myStatsCard}
