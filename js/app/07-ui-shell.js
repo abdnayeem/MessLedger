@@ -277,8 +277,12 @@ function renderMobileTabbar(tabs) {
   const bar = document.getElementById('mobile-tabbar');
   if (!bar) return;
 
-  const primary = tabs.slice(0, 4);
-  const rest = tabs.slice(4);
+  // Every tab renders directly in the bar now — no more overflow "More"
+  // sheet. The bar scrolls horizontally instead (see .mobile-tabbar CSS),
+  // so `rest` stays empty on purpose; renderMoreSheetBody([]) below just
+  // keeps the (now-unused) sheet body cleared out.
+  const primary = tabs;
+  const rest = [];
 
   const mtabBtn = t => {
     const cfg = tabConfig[t.id] || { label: t.id, icon: 'fa-circle' };

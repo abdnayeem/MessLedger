@@ -1,7 +1,7 @@
 // MessLedger service worker
 // Bump CACHE_VERSION whenever any precached file below changes, so old
 // clients pick up the new files instead of serving stale cached copies.
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v11';
 const CACHE_NAME = `messledger-${CACHE_VERSION}`;
 
 // Core app-shell files needed to load the app. Keep this list in sync with
@@ -61,7 +61,18 @@ const CROSS_ORIGIN_CACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS)
+      // BUGFIX: a plain fetch (which is what addAll(PRECACHE_URLS) does
+      // internally for an array of URL strings) honors the HTTP
+      // Cache-Control headers Firebase Hosting sends for these files
+      // (firebase.json sets `max-age=3600` on css/js/png/etc). That means
+      // install could silently pull a STALE copy straight from the
+      // browser's own HTTP cache instead of the real, current file on the
+      // server — and then bake that stale copy into this SW version's
+      // Cache Storage, where it would then get served on every normal
+      // load. Building each precache request with `cache: 'reload'`
+      // forces a genuine network fetch, bypassing HTTP cache entirely, so
+      // installs are always seeded from the real current files.
+      .then((cache) => cache.addAll(PRECACHE_URLS.map((url) => new Request(url, { cache: 'reload' })))
         // Cross-origin requests need mode:'no-cors' — without it, addAll()
         // would reject the whole install if the response doesn't include
         // CORS headers. The response this returns is "opaque" (we can't
@@ -144,9 +155,32 @@ self.addEventListener('fetch', (event) => {
   // Static assets (css/js/images/manifest): stale-while-revalidate — serve
   // the cached copy instantly if there is one, while quietly fetching a
   // fresh copy in the background for next time.
+  //
+  // BUGFIX 1: the background "fetch a fresh copy" step below is NOT part of
+  // the value handed to respondWith() when a cached copy already exists
+  // (respondWith() resolves immediately with `cached`). Once a fetch event
+  // is considered "handled", the browser is free to kill this service
+  // worker at any moment — so without event.waitUntil() keeping it alive,
+  // that background update routinely got cut off before cache.put() ran.
+  // Wrapping the revalidation in event.waitUntil() lets it actually
+  // finish, so the cache genuinely catches up after one normal load
+  // instead of staying stuck forever.
+  //
+  // BUGFIX 2: even with BUGFIX 1 in place, a PLAIN fetch(req) still honors
+  // ordinary HTTP caching — and Firebase Hosting sends `max-age=3600` on
+  // these files (see firebase.json). So the "revalidate" fetch could
+  // itself be silently served from the browser's own HTTP cache instead
+  // of the real network, and re-save that same stale bytes right back
+  // into this SW's Cache Storage — a no-op "update" that looks identical
+  // to the icon never refreshing. This is why the bug came back
+  // intermittently: it self-heals roughly an hour after each deploy, once
+  // that HTTP cache entry expires on its own, and a hard reload always
+  // "fixes" it because a hard reload bypasses both the service worker AND
+  // the HTTP cache for that load. Passing `cache: 'reload'` forces this
+  // fetch to hit the real network every time, closing that gap entirely.
   event.respondWith(
     caches.match(req).then((cached) => {
-      const networkFetch = fetch(req)
+      const revalidate = fetch(req, { cache: 'reload' })
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();
@@ -155,7 +189,8 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() => cached);
-      return cached || networkFetch;
+      event.waitUntil(revalidate.catch(() => {}));
+      return cached || revalidate;
     })
   );
 });

@@ -235,7 +235,7 @@
             <div class="who" id="who-box"></div>
           </header>
           <div class="month-bar">
-            <label for="month-select"><i class="fas fa-calendar-week"></i> Viewing month</label>
+            <label for="month-select"><i class="fas fa-calendar-week"></i> <span>Viewing month</span></label>
             <input type="month" id="month-select">
           </div>
         </div>
@@ -278,6 +278,8 @@
      individual numbered files in js/app/ as usual; just regenerate
      bundle.js after. -->
 <script defer src="js/app/bundle.js"></script>
+<!-- Mobile-only: shrinks the fixed header while scrolling (see file for details). -->
+<script defer src="js/header-collapse.js"></script>
 <script defer src="js/responsive-tables.js"></script>
 <script>
   // Register the service worker (app shell caching + installability).

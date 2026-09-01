@@ -7,6 +7,14 @@
 // position:fixed and needs a real viewport-relative offset — can sit right
 // below it. Runs immediately — this script is loaded with `defer`, so the
 // DOM already exists by the time this executes.
+//
+// Also mirrors the header card's own rendered height into --phc-h. On
+// mobile the header card (.page-header-card) is position:fixed (see CSS),
+// which takes it out of normal document flow — .content-wrap uses --phc-h
+// as its padding-top so page content starts below the fixed header instead
+// of underneath it. Recomputed by the same ResizeObserver since both
+// values change together (safe-area insets, greeting text wrapping, the
+// month-bar wrapping to a second line, etc).
 (function syncStickyHeaderVars() {
   const headerCardEl = document.querySelector('.page-header-card');
   const topbarEl = document.querySelector('.topbar');
@@ -14,6 +22,7 @@
   const setVars = () => {
     const root = document.documentElement.style;
     root.setProperty('--topbar-h', topbarEl.getBoundingClientRect().bottom + 'px');
+    root.setProperty('--phc-h', headerCardEl.getBoundingClientRect().height + 'px');
   };
   setVars();
   if (window.ResizeObserver) {
