@@ -1,7 +1,7 @@
 // MessLedger service worker
 // Bump CACHE_VERSION whenever any precached file below changes, so old
 // clients pick up the new files instead of serving stale cached copies.
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v13';
 const CACHE_NAME = `messledger-${CACHE_VERSION}`;
 
 // Core app-shell files needed to load the app. Keep this list in sync with

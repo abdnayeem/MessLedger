@@ -119,14 +119,28 @@ function renderDeposits() {
   const emptyMsg = scoped.length === 0 ? 'No deposits or withdrawals recorded yet.' : 'No records match your search.';
   const monthDep = monthTotalDeposits(currentMonth);
   const monthWd = monthTotalWithdrawals(currentMonth);
-  const monthNet = monthNetBalanceChange(currentMonth);
+  // "Left in hand" at the end of the previous month — deposits minus
+  // withdrawals minus what was actually spent (meal costs + expenses),
+  // carried forward. Same aggregate-across-members pattern already used
+  // for messPriorBalance in 09-dashboard.js and priorBalance in
+  // 11-reports.js.
+  const priorBalance = state.members.reduce((s, m) => s + openingBalance(m.id, currentMonth), 0);
+  const operatingCash = priorBalance + monthDep - monthWd;
+  // Actual cash physically left in hand right now — unlike Operating Cash
+  // above (just this month's deposit/withdrawal flow on top of Prior
+  // Balance), this also accounts for what's actually been spent this
+  // month on meals + shared expenses. Same total-balance-across-members
+  // sum as memberTotalBalance()/myTotalBalance() use per member.
+  const cashInHand = state.members.reduce((s, m) => s + memberTotalBalance(m.id), 0);
   const monthSummaryCard = depositsViewMode === 'month' ? `
     <div class="card">
       <h2>${currentMonth} Summary</h2>
       <div class="summary-grid">
+        <div class="summary-box"><div class="label">Prior Balance</div><div class="value ${priorBalance>=0?'pos':'neg'}">${priorBalance>=0?'':'-'}${fmtMoney(Math.abs(priorBalance))}</div></div>
         <div class="summary-box"><div class="label">Total Deposits</div><div class="value pos">${fmtMoney(monthDep)}</div></div>
         <div class="summary-box"><div class="label">Total Withdrawn</div><div class="value ${monthWd>0?'neg':''}">${fmtMoney(monthWd)}</div></div>
-        <div class="summary-box"><div class="label">Remaining Operating Cash</div><div class="value ${monthNet>=0?'pos':'neg'}">${monthNet>=0?'':'-'}${fmtMoney(Math.abs(monthNet))}</div></div>
+        <div class="summary-box"><div class="label">Remaining Operating Cash</div><div class="value ${operatingCash>=0?'pos':'neg'}">${operatingCash>=0?'':'-'}${fmtMoney(Math.abs(operatingCash))}</div></div>
+        <div class="summary-box"><div class="label">Cash in Hand</div><div class="value ${cashInHand>=0?'pos':'neg'}">${cashInHand>=0?'':'-'}${fmtMoney(Math.abs(cashInHand))}</div></div>
       </div>
     </div>` : '';
   return `

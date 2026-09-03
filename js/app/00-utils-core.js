@@ -24,12 +24,33 @@
     root.setProperty('--topbar-h', topbarEl.getBoundingClientRect().bottom + 'px');
     root.setProperty('--phc-h', headerCardEl.getBoundingClientRect().height + 'px');
   };
+  // header-collapse.js toggles .is-compact on scroll, which animates the
+  // header's padding/font-size over ~220ms (see css/style.css). Because
+  // that shrinks the header's rendered height frame-by-frame, an
+  // unthrottled ResizeObserver fires on nearly every animation frame —
+  // and each firing calls getBoundingClientRect() synchronously (forced
+  // layout) twice, then writes a CSS var that itself changes
+  // .content-wrap's padding-top (another forced layout downstream). Doing
+  // that every frame while the user is actively scrolling is what made
+  // the header feel like it "hangs"/stutters on scroll on mobile Safari.
+  // Collapsing every observation in a given frame into a single rAF-
+  // scheduled read keeps this to at most one measurement per frame
+  // instead of one per ResizeObserver callback.
+  let rafPending = false;
+  const scheduleSetVars = () => {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      setVars();
+    });
+  };
   setVars();
   if (window.ResizeObserver) {
-    const ro = new ResizeObserver(setVars);
+    const ro = new ResizeObserver(scheduleSetVars);
     ro.observe(headerCardEl);
   } else {
-    window.addEventListener('resize', setVars);
+    window.addEventListener('resize', scheduleSetVars);
   }
 })();
 

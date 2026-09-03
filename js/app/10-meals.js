@@ -313,15 +313,42 @@ function canEditMealForDate(memberId, dateStr) {
 }
 
 function formatRemaining(ms) {
-  const totalMin = Math.max(0, Math.floor(ms / 60000));
-  const days = Math.floor(totalMin / 1440);
-  const hours = Math.floor((totalMin % 1440) / 60);
-  const mins = totalMin % 60;
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
   const parts = [];
   if (days) parts.push(days + 'd');
   if (hours) parts.push(hours + 'h');
   if (mins || parts.length === 0) parts.push(mins + 'm');
+  parts.push(secs + 's');
   return parts.join(' ');
+}
+let _mealLockTickInterval = null;
+// Keeps the "Time left to edit" pill counting down live, second by second,
+// without a full re-render every tick (that would blow away focus/scroll on
+// the meals tab). Just pokes the badge text nodes directly, same pattern as
+// the session-expiry countdown in 05-session-sync.js. Stops itself once the
+// pill leaves the DOM (tab switched away) or once time runs out, in which
+// case a single renderTabContent() flips the pill over to its locked state.
+function startMealLockTick() {
+  if (_mealLockTickInterval) clearInterval(_mealLockTickInterval);
+  _mealLockTickInterval = setInterval(() => {
+    const full = document.getElementById('meal-lock-badge-full');
+    const short = document.getElementById('meal-lock-badge-short');
+    if (!full && !short) { clearInterval(_mealLockTickInterval); _mealLockTickInterval = null; return; }
+    const remaining = mealLockTime(mealSelectedDate) - new Date();
+    if (remaining <= 0) {
+      clearInterval(_mealLockTickInterval);
+      _mealLockTickInterval = null;
+      renderTabContent();
+      return;
+    }
+    const text = formatRemaining(remaining);
+    if (full) full.textContent = text;
+    if (short) short.textContent = text;
+  }, 1000);
 }
 // Mobile-vs-desktop check for the Meals "your row first, Load More for
 // everyone else" layout — same 768px breakpoint convention as the rest of
@@ -476,40 +503,80 @@ function ensureMealBulkActionsStyles() {
       .meal-bulk-btns{ width:100%; }
       .meal-bulk-btn{ flex:1; justify-content:center; padding:8px 10px; }
     }
-    /* REDESIGN: every previous attempt to squeeze the lock-status pill
-       into the SAME row as the date field kept breaking in a new way on
-       mobile — text overflowing off-screen, the native date input
-       rendering as literally "0" when shrunk too far, then Safari
-       painting its content wider than the box regardless and overlapping
-       the pill anyway. The root problem was always the same: a native
-       <input type=date> renders at an unpredictable width depending on
-       the device/browser/locale, so nothing sharing its row can be sized
-       reliably. Instead of continuing to fight that, the pill now gets
-       its OWN full-width row below the date field on mobile — no
-       competition for space, no overlap possible, and room for a proper
-       card treatment (padding, colored background, icon on the left,
-       message + time badge on the right) instead of the cramped
-       icon-and-text-only version from the last few iterations. */
-    @media (max-width:480px){
-      .meals-datebar{ flex-wrap:wrap; gap:10px; }
-      .meals-datebar-field{ flex:1 1 auto; max-width:100%; }
-      .meals-datebar .meal-lock-pill{
-        flex-basis:100%; width:100%; box-sizing:border-box;
-        justify-content:space-between; gap:10px;
-        padding:11px 14px; font-size:13px;
-      }
-      .meals-datebar .meal-lock-pill i{ font-size:14px; }
-      .meals-datebar .meal-lock-pill .pill-badge{ font-weight:800; font-size:12.5px; }
+    /* Meals control row.
+       Mobile (<640px): restored to the original single nowrap row —
+       date field fixed to 40% of the row, lock pill grows to fill the
+       rest (flex:1 1 auto), pill switches to its short "🕐 9h 13m" text
+       and stops growing once the row can't fit the full sentence. This
+       is deliberately back to exactly how it behaved in the first
+       version of this file.
+       Desktop (>=640px): date field becomes a fixed compact column, the
+       pill hugs its own content instead of stretching, and the row's
+       justify-content:space-between pushes the pill flush right — the
+       later redesign that fixed the pill "ridiculously wide" desktop bug. */
+    .meals-datebar{
+      display:flex; align-items:stretch; flex-wrap:nowrap; gap:10px;
+      position:sticky; z-index:140;
+      top:calc(var(--phc-h,118px) + 8px);
+      margin:-4px -4px 14px; padding:8px 12px 12px;
+      background:var(--surface,#fff);
+      border-bottom:1px solid var(--border,#DFE4EA);
     }
-    /* Lock-status pill: long messages like "Time left to edit this date:
-       25m (locks at 11:59 PM BD time on 2026-08-23)." are fine on desktop
-       but don't fit the now-full-width mobile row — .pill-short is the
-       compact version of the same message (see renderMealsEdit() above),
-       shown only on mobile while .pill-full stays hidden there. */
+    @media (min-width:640px){ .meals-datebar{ justify-content:space-between; } }
+    @media (min-width:900px){ .meals-datebar{ top:0; } }
+    /* .card sets overflow-x:auto without an explicit overflow-y, which the
+       CSS overflow spec computes as overflow-y:auto too — silently turning
+       the card into its own scroll container and breaking position:sticky
+       for children like .meals-datebar above. Force it back to visible
+       just for this card. */
+    .card:has(.meals-datebar){ overflow:visible; }
+    .meals-datebar-field{
+      flex:0 0 40%; max-width:40%; min-width:0; width:0;
+      display:flex; align-items:stretch; box-sizing:border-box; overflow:visible;
+    }
+    @media (min-width:640px){
+      .meals-datebar-field{ flex:0 0 176px; max-width:176px; }
+    }
+    .meals-datebar-field label{
+      position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+    }
+    /* Real iOS Safari refuses to shrink a native <input type=date> to
+       fit width:100% inside a flex child — it falls back to its own
+       locale-dependent intrinsic content width and overflows sideways.
+       An explicit pixel width:0 + min/max-width:100% (which resolve
+       against the flex item's own box, not the input's intrinsic size)
+       forces Safari onto the same sizing path as Chrome/Firefox. */
+    .meals-datebar-field input[type=date]{
+      width:0; min-width:100%; max-width:100%; box-sizing:border-box;
+      height:40px; min-height:0; padding:0 10px; font-size:12.5px; font-weight:600;
+    }
+    .meals-datebar .meal-lock-pill{
+      flex:1 1 auto; min-width:0; margin:0; box-sizing:border-box;
+      height:40px; align-items:center; flex-wrap:nowrap; overflow:hidden;
+      gap:6px; padding:0 10px; font-size:11.5px; white-space:nowrap;
+    }
+    @media (min-width:640px){
+      .meals-datebar .meal-lock-pill{ flex:0 0 auto; padding:0 12px; }
+    }
+    .meals-datebar .meal-lock-pill i{ font-size:12px; flex-shrink:0; }
+    .meals-datebar .meal-lock-pill .pill-badge{
+      font-size:11px; padding:2px 7px; flex-shrink:0; white-space:nowrap;
+    }
+    .meals-datebar .meal-lock-pill .pill-full,
+    .meals-datebar .meal-lock-pill .pill-short,
+    .meals-datebar .meal-lock-pill .pill-short-label{
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+    }
+    /* The full sentence ("Time left to edit this date: 16h 6m 4s (locks
+       at 11:59 PM BD time on 2026-09-04).") only fits once the pill has
+       real width to itself — .pill-short is the compact version (see
+       renderMealsEdit() above), shown below 640px same as the original. */
     .meal-lock-pill .pill-short{ display:none; }
-    @media (max-width:480px){
+    @media (max-width:640px){
       .meal-lock-pill .pill-full{ display:none; }
-      .meal-lock-pill .pill-short{ display:inline-flex; align-items:center; gap:6px; }
+      .meal-lock-pill .pill-short{ display:inline-flex; align-items:center; gap:6px; min-width:0; }
+      .meals-datebar .meal-lock-pill{ flex:0 1 auto; }
     }
   `;
   document.head.appendChild(style);
@@ -653,7 +720,7 @@ function renderMealsEdit(headerHtml) {
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
-          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short">Left to edit: <span class="pill-badge">${formatRemaining(remainingTime)}</span></span></div>`;
+          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge" id="meal-lock-badge-full">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short"><span class="pill-short-label">Left to edit:</span> <span class="pill-badge" id="meal-lock-badge-short">${formatRemaining(remainingTime)}</span></span></div>`;
         } else {
           lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, but you as admin can still edit.</span><span class="pill-short">Past lock (edit OK)</span></div>`;
         }
@@ -664,7 +731,7 @@ function renderMealsEdit(headerHtml) {
       } else {
         const remainingTime = mealLockTime(mealSelectedDate) - new Date();
         if (remainingTime > 0) {
-          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short">Left to edit: <span class="pill-badge">${formatRemaining(remainingTime)}</span></span></div>`;
+          lockMessage = `<div class="meal-lock-pill success"><i class="far fa-clock"></i> <span class="pill-full">Time left to edit this date: <span class="pill-badge" id="meal-lock-badge-full">${formatRemaining(remainingTime)}</span> <span class="pill-note">(locks at ${formatTime12(state.settings.mealLockHour, state.settings.mealLockMinute)} BD time on ${bdDateStrFromInstant(mealLockTime(mealSelectedDate))}).</span></span><span class="pill-short"><span class="pill-short-label">Left to edit:</span> <span class="pill-badge" id="meal-lock-badge-short">${formatRemaining(remainingTime)}</span></span></div>`;
         } else {
           lockMessage = `<div class="meal-lock-pill warning"><i class="fas fa-triangle-exclamation"></i> <span class="pill-full">This date is past the lock time, contact an admin for changes.</span><span class="pill-short">Past lock</span></div>`;
         }
@@ -934,6 +1001,12 @@ function attachMealHandlers() {
       mealSelectedDate = newDate;
       renderTabContent();
     });
+  }
+  if (document.getElementById('meal-lock-badge-full') || document.getElementById('meal-lock-badge-short')) {
+    startMealLockTick();
+  } else if (_mealLockTickInterval) {
+    clearInterval(_mealLockTickInterval);
+    _mealLockTickInterval = null;
   }
 }
 async function changeMeal(memberId, type, delta) {
