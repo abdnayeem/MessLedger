@@ -769,7 +769,8 @@ function generateRecoveryCode() {
   let code = '';
   for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return 'MESS-' + code;
-}// ---------------------------------------------------------------------------
+}
+// ---------------------------------------------------------------------------
 // 02-state-storage.js  (originally app.js lines 482-1019)
 // Default settings, local cache read/write, storage key constants, admin month-access rules, state defaults/migration, Firestore doc assembly, loadState()
 // ---------------------------------------------------------------------------
@@ -838,7 +839,12 @@ function defaultSettings() {
       mealEditReminderEnabled: true,
       mealEditReminderTime: '20:00', // BD time, HH:MM — daily reminder that tomorrow's meal edit cutoff is approaching
       marketReminderTime: '08:00' // BD time, HH:MM — daily reminder sent to whoever has market/bazar duty that day
-    }
+    },
+    // Per-tab id -> true/false, applied the same way to every "member" role
+    // account (not per-person) — see CONFIGURABLE_TAB_IDS/tabsForRole() in
+    // 07-ui-shell.js and renderTabAccessSettings() in 18-settings-admin.js.
+    // A tab id simply absent here means "use the normal role default".
+    memberTabAccess: {}
   };
 }
 // REMOVED: defaultState() used to generate a hardcoded 14-member demo
@@ -2679,7 +2685,8 @@ function stopNotificationScheduler() {
     clearInterval(notifScheduleInterval);
     notifScheduleInterval = null;
   }
-}// ---------------------------------------------------------------------------
+}
+// ---------------------------------------------------------------------------
 // 06-auth.js  (originally app.js lines 1719-2175)
 // App entry (enterApp/hideBootLoader), login screen + doLogin/forgotPin, device detection, login/action logs, logout, PIN change + forced-PIN modal
 // ---------------------------------------------------------------------------
@@ -11705,6 +11712,15 @@ async function saveSettings() {
     mealsHistoryVisibility,
     adminMonthAccess: state.settings.adminMonthAccess,
     notifications: state.settings.notifications,
+    // BUGFIX: this object literal rebuilds state.settings from scratch out
+    // of the form fields above, so any settings field NOT edited by this
+    // form has to be explicitly carried forward here or saving anything
+    // else on this page would silently wipe it back to undefined the next
+    // time someone clicked "Save Settings". memberTabAccess is edited by
+    // its own card (toggleMemberTabAccessSetting() above, saves instantly,
+    // no "Save Settings" needed) — carried forward here for the same
+    // reason as adminMonthAccess/notifications/maintenanceMode below.
+    memberTabAccess: state.settings.memberTabAccess,
     // Not edited by this form — see saveMaintenanceSettings() below. Carried
     // forward as-is so saving any other setting here doesn't silently wipe
     // maintenance mode back off.
@@ -11762,7 +11778,8 @@ async function resetSettings() {
   refreshSessionActivity();
   showToast('Settings reset to defaults.', 'success');
   renderTabContent();
-}// ---------------------------------------------------------------------------
+}
+// ---------------------------------------------------------------------------
 // 19-backup-testdata.js  (originally app.js lines 6751-7036)
 // Member/settings snapshots, manual backup, restore snapshot, reset/restore test data, state validation, cache clear, boot error UI
 // ---------------------------------------------------------------------------

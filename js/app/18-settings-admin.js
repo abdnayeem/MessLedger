@@ -497,6 +497,15 @@ async function saveSettings() {
     mealsHistoryVisibility,
     adminMonthAccess: state.settings.adminMonthAccess,
     notifications: state.settings.notifications,
+    // BUGFIX: this object literal rebuilds state.settings from scratch out
+    // of the form fields above, so any settings field NOT edited by this
+    // form has to be explicitly carried forward here or saving anything
+    // else on this page would silently wipe it back to undefined the next
+    // time someone clicked "Save Settings". memberTabAccess is edited by
+    // its own card (toggleMemberTabAccessSetting() above, saves instantly,
+    // no "Save Settings" needed) — carried forward here for the same
+    // reason as adminMonthAccess/notifications/maintenanceMode below.
+    memberTabAccess: state.settings.memberTabAccess,
     // Not edited by this form — see saveMaintenanceSettings() below. Carried
     // forward as-is so saving any other setting here doesn't silently wipe
     // maintenance mode back off.

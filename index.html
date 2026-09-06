@@ -33,18 +33,33 @@
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
+<!-- BUGFIX (icons only loading after a hard refresh, never on a normal
+     visit): Font Awesome used to load from cdnjs.cloudflare.com. The
+     service worker cached it cache-first for offline support, which meant
+     any one bad/incomplete response ever cached (a dropped packet during
+     install, a flaky CDN edge node) stayed broken forever — a cached
+     opaque cross-origin response can't be inspected to tell it was bad, and
+     cache-first never rechecks once something is cached. Self-hosting from
+     vendor/fontawesome/ removes the CDN dependency entirely: this is now
+     just another same-origin file, precached and revalidated the exact
+     same reliable way as bundle.js/style.css (see PRECACHE_URLS and the
+     stale-while-revalidate fetch handler in sw.js), instead of needing its
+     own special-cased cross-origin handling. -->
+<link rel="preload" as="style" href="vendor/fontawesome/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
 <noscript>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
 </noscript>
 <link rel="stylesheet" href="css/style.css">
 <style>
   /* Inline critical CSS so a loading state shows immediately, before the
      external stylesheets above have even finished downloading. Without
-     this, the page is a truly blank white screen until fonts.googleapis.com,
-     cdnjs (Font Awesome), and css/style.css all finish loading — which is
-     exactly the "5 seconds of white screen" being seen. */
+     this, the page is a truly blank white screen until fonts.googleapis.com
+     and css/style.css all finish loading — which is exactly the "5 seconds
+     of white screen" being seen. (Font Awesome used to be on this list too,
+     back when it loaded from cdnjs — it's self-hosted from vendor/fontawesome/
+     now, see the BUGFIX comment on that link tag above, so it no longer
+     depends on a third-party CDN being up.) */
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   html,body{background:#F6F7F4; margin:0; width:100%; overflow-x:hidden;}
   /* Dark-theme critical override — kept minimal (just the boot screen's

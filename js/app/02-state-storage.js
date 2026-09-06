@@ -67,7 +67,12 @@ function defaultSettings() {
       mealEditReminderEnabled: true,
       mealEditReminderTime: '20:00', // BD time, HH:MM — daily reminder that tomorrow's meal edit cutoff is approaching
       marketReminderTime: '08:00' // BD time, HH:MM — daily reminder sent to whoever has market/bazar duty that day
-    }
+    },
+    // Per-tab id -> true/false, applied the same way to every "member" role
+    // account (not per-person) — see CONFIGURABLE_TAB_IDS/tabsForRole() in
+    // 07-ui-shell.js and renderTabAccessSettings() in 18-settings-admin.js.
+    // A tab id simply absent here means "use the normal role default".
+    memberTabAccess: {}
   };
 }
 // REMOVED: defaultState() used to generate a hardcoded 14-member demo

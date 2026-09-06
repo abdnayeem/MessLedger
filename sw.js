@@ -1,7 +1,7 @@
 // MessLedger service worker
 // Bump CACHE_VERSION whenever any precached file below changes, so old
 // clients pick up the new files instead of serving stale cached copies.
-const CACHE_VERSION = 'v26';
+const CACHE_VERSION = 'v29';
 const CACHE_NAME = `messledger-${CACHE_VERSION}`;
 
 // Core app-shell files needed to load the app. Keep this list in sync with
@@ -13,6 +13,7 @@ const PRECACHE_URLS = [
   './css/style.css',
   './js/firebase-config.js',
   './js/storage.js',
+  './js/header-collapse.js',
   './js/app/bundle.js',
   './js/responsive-tables.js',
   './favicon.png',
@@ -25,37 +26,41 @@ const PRECACHE_URLS = [
   './icons/icon-192.png',
   './icons/icon-256.png',
   './icons/icon-384.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  // BUGFIX (icons only loading after a hard refresh, never on a normal
+  // visit): Font Awesome used to be cross-origin (cdnjs.cloudflare.com),
+  // handled separately below in CROSS_ORIGIN_CACHE_URLS with special-cased
+  // opaque-response caching. That caching was cache-first, so any one
+  // bad/incomplete response ever cached (a dropped packet during install, a
+  // flaky CDN edge node) stayed broken forever — an opaque cross-origin
+  // response can't be inspected from JS to tell it was bad. It's
+  // self-hosted from vendor/fontawesome/ now (see index.html), so it's
+  // just another same-origin file here, getting the exact same reliable
+  // stale-while-revalidate treatment as bundle.js/style.css below — no
+  // special cross-origin handling needed, and no CDN dependency to break.
+  './vendor/fontawesome/css/all.min.css',
+  './vendor/fontawesome/webfonts/fa-solid-900.woff2',
+  './vendor/fontawesome/webfonts/fa-solid-900.ttf',
+  './vendor/fontawesome/webfonts/fa-regular-400.woff2',
+  './vendor/fontawesome/webfonts/fa-regular-400.ttf'
 ];
 
 // Cross-origin resources loaded in index.html that also need to work
 // offline — separate from PRECACHE_URLS above since cross-origin caching
 // needs different handling (see the install/fetch handlers below).
-//   - Firebase SDK: without it cached, opening the app fully offline hit a
-//     "Cannot access 'authReady' before initialization" crash (see the
-//     BUGFIX comment in firebase-config.js) — the whole SDK, and so
-//     firebase-config.js's own setup code, had nowhere to load from.
-//   - Font Awesome: without ITS files cached, every icon in the app quietly
-//     disappears offline (the tab icons, buttons, everywhere .fa-* is
-//     used) — the CSS/webfont files simply had nowhere to load from
-//     either, same root cause as the Firebase issue above, just a
-//     visual/UX bug instead of a crash. Only the two icon styles actually
-//     used in this app are listed (see the fa-solid-900 = "fas" class and
-//     fa-regular-400 = "far" class usage throughout js/app/*.js) — this
-//     app has no "fab" (brands) icons, so that font isn't cached.
-// All of these URLs are version-pinned (Firebase's URL has the SDK version
-// in the path; Font Awesome's likewise), so caching them long-term is
-// safe — a version bump in index.html naturally becomes a new URL, which
-// this cache simply doesn't have yet and fetches fresh.
+// Firebase SDK: without it cached, opening the app fully offline hit a
+// "Cannot access 'authReady' before initialization" crash (see the
+// BUGFIX comment in firebase-config.js) — the whole SDK, and so
+// firebase-config.js's own setup code, had nowhere to load from.
+// (Font Awesome used to be listed here too — see the BUGFIX comment on
+// vendor/fontawesome/ above for why it moved to PRECACHE_URLS instead.)
+// This URL is version-pinned (the SDK version is in the path), so caching
+// it long-term is safe — a version bump in index.html naturally becomes a
+// new URL, which this cache simply doesn't have yet and fetches fresh.
 const CROSS_ORIGIN_CACHE_URLS = [
   'https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js',
-  'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.ttf',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.ttf'
+  'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -115,15 +120,33 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
 
   // Cross-origin resources we deliberately cache (see CROSS_ORIGIN_CACHE_URLS
-  // above): cache-first, since every URL in that list is version-pinned so
-  // a cached copy is never stale. This has to be checked BEFORE the
-  // same-origin-only check below, since these are the deliberate exception
-  // to "cross-origin always goes straight to network" — everything else
-  // cross-origin (Firestore/Auth API calls, Google Fonts) still bypasses
-  // the cache entirely, unchanged.
+  // above) — for offline support only, so this should be NETWORK-FIRST, not
+  // cache-first.
+  // BUGFIX (icons only load after a hard refresh, never on a normal visit):
+  // this used to be cache-first (`cached || fetch(...)`). If the very first
+  // precache attempt during install (see the install handler above) ever
+  // hit a network hiccup — a dropped packet, a CDN edge node returning a
+  // bad response — cache.put() would store that BROKEN opaque response
+  // (opaque = we can't inspect its status from JS, so there was no way to
+  // detect and reject a bad one). Cache-first means "any cached entry
+  // short-circuits the network" — so once that one bad response landed,
+  // Font Awesome's CSS/webfonts (and every icon in the app) stayed broken
+  // on every normal visit forever, since a cached entry, however broken,
+  // always won. A hard refresh "fixed" it by bypassing the SW/cache
+  // entirely for that one load, straight to a fresh network fetch — which
+  // is exactly what network-first now does automatically, every time,
+  // without needing a hard refresh. Falls back to the cached copy only
+  // when the network fetch itself fails (i.e. genuinely offline), which is
+  // all this cache was ever meant to cover, and re-caches the response each
+  // time the network succeeds so the offline fallback stays fresh too.
   if (req.method === 'GET' && CROSS_ORIGIN_CACHE_URLS.includes(req.url)) {
     event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req, { mode: 'no-cors' }))
+      fetch(req, { mode: 'no-cors' })
+        .then((res) => {
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone())));
+          return res;
+        })
+        .catch(() => caches.match(req))
     );
     return;
   }
