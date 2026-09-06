@@ -93,7 +93,14 @@ let costsSort = {
 // Client-side pagination for the Cost List table — purely a display-windowing
 // concern over the already-filtered/sorted `list` computed in renderCosts();
 // doesn't touch search, sort, or the underlying data in any way.
-const COSTS_PAGE_SIZE = 10;
+// Set to a very large number (not Infinity — (page-1)*Infinity is NaN when
+// page is 1, which breaks pageStart/pageEnd below) so a whole month's (or
+// "All Time"'s) records always show on one page — no page-2/3 split, no
+// pagination widget (the existing totalPages > 1 guard below hides it
+// automatically once there's only ever one page). Kept as a named constant
+// rather than deleting the pagination code, in case a page size is wanted
+// again later.
+const COSTS_PAGE_SIZE = 1000000;
 let costsPage = 1;
 
 function setCostsPage(page) {
@@ -144,6 +151,7 @@ function setCostsSearch(val) {
 
 function renderCosts() {
   const canDelete = session.role === 'superadmin';
+  const canAdd = session.role === 'admin' || session.role === 'superadmin';
   const list0 = (costsViewMode === 'month' ? state.costs.filter(c => c.date.startsWith(currentMonth)) : state.costs.slice());
 
   const q = costsSearch.trim().toLowerCase();
@@ -236,18 +244,14 @@ function renderCosts() {
     <th class="cl-th sortable-th" onclick="setCostsSort('note')">Note${costsSortArrowHtml('note')}</th>
     <th class="cl-th"></th></tr>`;
 
-  // Pagination footer — dynamically built from the current filtered list, never hardcoded.
-  const pageNums = costsPageWindow(costsPage, totalPages);
+  // Pagination footer — kept to a plain "Showing X of Y" line only. The
+  // actual page-number/prev-next buttons were removed entirely (not just
+  // hidden) since COSTS_PAGE_SIZE is now large enough that there's never a
+  // second page to navigate to — keeping dead prev/next buttons around
+  // just to immediately disable them serves no purpose.
   const paginationHtml = `
     <div class="cl-pagination">
       <div class="cl-pagination-info">${list.length === 0 ? 'Showing 0 of 0 entries' : `Showing ${pageStart + 1} to ${pageEnd} of ${list.length} entries`}</div>
-      <div class="cl-pagination-pages">
-        <button class="cl-page-btn" onclick="setCostsPage(1)" ${costsPage<=1?'disabled':''} title="First page">«</button>
-        <button class="cl-page-btn" onclick="setCostsPage(${Math.max(1,costsPage-1)})" ${costsPage<=1?'disabled':''} title="Previous page">‹</button>
-        ${pageNums.map(p => `<button class="cl-page-btn ${p===costsPage?'cl-page-active':''}" onclick="setCostsPage(${p})">${p}</button>`).join('')}
-        <button class="cl-page-btn" onclick="setCostsPage(${Math.min(totalPages,costsPage+1)})" ${costsPage>=totalPages?'disabled':''} title="Next page">›</button>
-        <button class="cl-page-btn" onclick="setCostsPage(${totalPages})" ${costsPage>=totalPages?'disabled':''} title="Last page">»</button>
-      </div>
     </div>`;
   return `
     <style>
@@ -454,7 +458,7 @@ function renderCosts() {
         .cl-pagination { flex-direction:column; align-items:flex-start; }
       }
     </style>
-    <div class="card">
+    ${canAdd ? `<div class="card">
       <div class="gc-header">
         <div class="gc-header-left">
           <div class="gc-header-icon">
@@ -542,7 +546,7 @@ function renderCosts() {
           <p>Add a separate entry for each meal — multiple entries per day are fine. "Purchased By" defaults to that date's scheduled market-duty member, but change it if someone else actually bought it.</p>
         </div>
       </div>
-    </div>
+    </div>` : ''}
     <div class="card keep-native-tables">
       <div class="cl-header">
         <div class="cl-header-left">

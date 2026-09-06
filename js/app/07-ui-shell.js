@@ -161,7 +161,20 @@ const tabGroups = {
   settings: 'Admin'
 };
 
-function tabsForRole() {
+// Tabs a superadmin can globally show/hide for the general "member" role —
+// ONE setting that applies the same way to every member (not per-person),
+// stored in state.settings.memberTabAccess. See renderTabAccessSettings()
+// in 18-settings-admin.js and toggleMemberTabAccessSetting() there too.
+// Dashboard is always on for everyone; Members/Login Log/Database Log/
+// Settings stay superadmin-only no matter what (those grant real admin
+// actions, not just a view, so they're deliberately not offered here).
+// Admin/superadmin visibility is untouched by this setting — it only
+// affects the plain "member" role.
+const CONFIGURABLE_TAB_IDS = ['meals', 'schedule', 'history', 'costs', 'expenses', 'deposits'];
+
+function tabsForRole(member) {
+  const m = member || memberById(session.userId);
+  const role = m ? m.role : session.role;
   const base = [{
       id: 'dashboard'
     },
@@ -173,20 +186,25 @@ function tabsForRole() {
     },
     {
       id: 'history'
+    },
+    // Grocery Costs / Shared Expenses are visible to every role — general
+    // members get a view-only Cost List / Shared Expense List (the "Add"
+    // forms and Edit/Delete are still gated inside renderCosts()/
+    // renderExpenses() themselves, see canAdd/canDelete there). Deposits
+    // stays admin/superadmin-only below since it's not part of this ask.
+    {
+      id: 'costs'
+    },
+    {
+      id: 'expenses'
     }
   ];
-  if (session.role === 'admin' || session.role === 'superadmin') {
-    base.push({
-      id: 'costs'
-    });
-    base.push({
-      id: 'expenses'
-    });
+  if (role === 'admin' || role === 'superadmin') {
     base.push({
       id: 'deposits'
     });
   }
-  if (session.role === 'superadmin') {
+  if (role === 'superadmin') {
     base.push({
       id: 'members'
     });
@@ -199,6 +217,20 @@ function tabsForRole() {
     base.push({
       id: 'settings'
     });
+  }
+  // One global override set, applied the same way to every "member" —
+  // not per-person. Admin/superadmin are unaffected.
+  const overrides = state.settings.memberTabAccess;
+  if (role === 'member' && overrides) {
+    let ids = base.map(t => t.id);
+    CONFIGURABLE_TAB_IDS.forEach(tabId => {
+      const override = overrides[tabId];
+      if (override === true && !ids.includes(tabId)) ids.push(tabId);
+      if (override === false) ids = ids.filter(id => id !== tabId);
+    });
+    return ids.map(id => ({
+      id
+    }));
   }
   return base;
 }

@@ -82,6 +82,61 @@ function renderAdminMonthAccessCard() {
   return html;
 }
 
+// Lets a super admin show/hide specific tabs for the general "member" role
+// — ONE global setting that applies the same way to every member (not
+// per-person), stored in state.settings.memberTabAccess and read by
+// tabsForRole()/CONFIGURABLE_TAB_IDS (07-ui-shell.js). Saves immediately
+// per-checkbox via toggleMemberTabAccessSetting() below — unlike the rest
+// of this Settings tab, there's no separate "Save Settings" step for this
+// card. Admin/superadmin visibility is untouched — this only affects
+// members.
+function renderTabAccessSettings() {
+  const overrides = state.settings.memberTabAccess || {};
+  // Role default for a plain "member" (before any override) — hardcoded
+  // rather than calling tabsForRole(), since tabsForRole() itself applies
+  // this same override for role 'member' and would otherwise mask the
+  // "before override" baseline this checkbox needs to compare against.
+  const memberRoleDefaults = {
+    meals: true,
+    schedule: true,
+    history: true,
+    costs: true,
+    expenses: true,
+    deposits: false
+  };
+  const cells = CONFIGURABLE_TAB_IDS.map(tabId => {
+    const override = overrides[tabId];
+    const effective = override === undefined ? memberRoleDefaults[tabId] : override;
+    return `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+      <input type="checkbox" ${effective ? 'checked' : ''} onchange="toggleMemberTabAccessSetting('${tabId}', this.checked)">
+      ${escapeHtml(tabConfig[tabId].label)}
+    </label>`;
+  }).join('');
+  return `
+    <div class="card">
+      <h2>Tab Access (General Members)</h2>
+      <div class="small-note" style="margin-bottom:14px;">Show or hide tabs for every general member at once — this applies the same way to all of them, not per-person. Admins and Super Admins are unaffected and always keep their usual access. Changes save immediately, no "Save Settings" needed.</div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">${cells}</div>
+    </div>`;
+}
+// Global (not per-member) tab visibility toggle for the "member" role — see
+// CONFIGURABLE_TAB_IDS/tabsForRole() in 07-ui-shell.js.
+// checked === true  -> force this tab ON for every member, even if the role
+//                      wouldn't normally include it (e.g. Deposits).
+// checked === false -> force this tab OFF for every member, even if the
+//                      role would normally include it.
+async function toggleMemberTabAccessSetting(tabId, checked) {
+  if (session.role !== 'superadmin') {
+    showToast('Only the super admin can change tab access.', 'error');
+    renderTabContent();
+    return;
+  }
+  if (!state.settings.memberTabAccess) state.settings.memberTabAccess = {};
+  state.settings.memberTabAccess[tabId] = checked;
+  await persistSettings();
+  renderTabContent();
+}
+
 function renderSettings() {
   const s = state.settings;
   return `
@@ -169,6 +224,7 @@ function renderSettings() {
       <button class="btn secondary" onclick="resetSettings()">Reset to Defaults</button>
     </div>
     ${renderAdminMonthAccessCard()}
+    ${renderTabAccessSettings()}
     ${renderNotificationSettingsCard()}
     ${session.role === 'superadmin' ? `
     <div class="card" style="border:1px solid var(--danger); ">

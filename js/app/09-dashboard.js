@@ -45,20 +45,36 @@ function nextMarketInfo(member) {
   if (!hasMarketDay(member)) return null;
   const targetDay = Number(member.marketDay);
   const now = new Date();
-  const todayIdx = now.getDay();
+  // BUGFIX: "today"/"overdue"/countdown here must be computed in Bangladesh
+  // time, not the viewing device's own local time — this needs to stay in
+  // sync with checkMarketDutyReminders()/checkMarketCompletionReminders()
+  // in 01-notifications.js, which already work off Asia/Dhaka (via
+  // bdTodayDateStr()/bdNowHHMM()). The old version used the browser's own
+  // clock (new Date().getDay()/.getHours()), so a member opening the app
+  // from a different timezone — or a phone with the wrong auto-timezone —
+  // could see "today"/"overdue" here disagree with the BD-time reminder
+  // they actually got: e.g. this page still calling it "not your day yet"
+  // after the notification already fired, or marking someone overdue a
+  // day early/late. Building a UTC-midnight Date from the BD Y/M/D (via
+  // getBDNowParts(), already used elsewhere for the same reason) and
+  // reading getUTCDay()/setUTCDate() off it gives the correct BD calendar
+  // day and weekday regardless of what timezone the browser itself is in.
+  const bd = getBDNowParts();
+  const bdTodayUTC = new Date(Date.UTC(bd.year, bd.month - 1, bd.day));
+  const todayIdx = bdTodayUTC.getUTCDay();
   const diff = (targetDay - todayIdx + 7) % 7;
-  const nextDate = new Date(now);
-  nextDate.setDate(now.getDate() + diff);
-  nextDate.setHours(0, 0, 0, 0);
   const isToday = diff === 0;
   const deadlineHour = marketDeadlineHourFor(member.marketShift);
 
-  // Precise countdown against the real deadline moment (target date at that
-  // shift's deadline hour) — not just whole calendar days — so "1 day left"
-  // can instead read "1d 6h 24m left", using the same lunch/dinner deadline
-  // times already configured in Settings.
-  const deadline = new Date(nextDate);
-  deadline.setHours(deadlineHour, 0, 0, 0);
+  const targetUTC = new Date(bdTodayUTC);
+  targetUTC.setUTCDate(bdTodayUTC.getUTCDate() + diff);
+  // Deadline instant = the target BD calendar date at deadlineHour:00 BD
+  // time. BD is UTC+6, so deadlineHour BD = (deadlineHour - 6) UTC — this
+  // gives a real, absolute instant that compares correctly against `now`
+  // no matter what timezone the viewing device is set to (same technique
+  // as mealLockTime() in 10-meals.js).
+  const deadline = new Date(targetUTC);
+  deadline.setUTCHours(deadlineHour - 6, 0, 0, 0);
   const diffMs = deadline - now;
   const overdue = diffMs < 0;
   const absMs = Math.abs(diffMs);
@@ -67,8 +83,15 @@ function nextMarketInfo(member) {
   const remMinutes = Math.floor((absMs % 3600000) / 60000);
   const hoursLeft = isToday ? Math.round(absMs / 3600000) : null; // kept for anything still relying on the old rounded-hours value
 
+  // A local Date carrying the SAME year/month/day as the BD target date,
+  // for display only — fmtShortDate()/WEEKDAYS[...] read getDate()/
+  // getMonth() in the device's own local time, so this keeps the *numbers*
+  // shown correct for the viewer regardless of their timezone, even though
+  // it isn't literally the BD-midnight instant.
+  const dateForDisplay = new Date(targetUTC.getUTCFullYear(), targetUTC.getUTCMonth(), targetUTC.getUTCDate());
+
   return {
-    date: nextDate,
+    date: dateForDisplay,
     daysLeft: diff,
     hoursLeft,
     isToday,
@@ -315,25 +338,19 @@ function renderTrendsCard() {
 
 /* ---------------- DASHBOARD ---------------- */
 /* ---------------- TOMORROW-MEAL-OFF REMINDER BANNER ----------------
-   Shows a small dismissible card at the top of Dashboard when the
-   logged-in member has BOTH lunch and dinner off (0) for tomorrow and
-   there's still time to change it (mirrors the same isMealLocked() gate
-   Meals tab itself uses, so this never offers an action that would then
-   fail as "locked"). Dismissing hides it for the rest of that specific
-   tomorrow-date only (localStorage) — it reappears once the date rolls
-   over to a new "tomorrow" that's also still off. */
-function tomorrowMealReminderDismissKey() {
-  return `messledger-meal-reminder-dismissed:${session.userId}:${tomorrowStr()}`;
-}
+   Shows a small card at the top of Dashboard when the logged-in member has
+   BOTH lunch and dinner off (0) for tomorrow and there's still time to
+   change it (mirrors the same isMealLocked() gate Meals tab itself uses,
+   so this never offers an action that would then fail as "locked").
+   No manual dismiss anymore — the banner's own action buttons (Turn Both
+   On / Lunch On / Dinner On) turn at least one meal on, which is exactly
+   the condition that makes it stop showing on its own. */
 function shouldShowTomorrowMealBanner() {
   if (!session || !session.userId) return false;
   const m = memberById(session.userId);
   if (!m) return false;
   const d = tomorrowStr();
   if (isMealLocked(d)) return false; // no point offering an action that's already too late
-  let dismissed = false;
-  try { dismissed = localStorage.getItem(tomorrowMealReminderDismissKey()) === '1'; } catch (e) {}
-  if (dismissed) return false;
   const rec = state.days[d] && state.days[d].meals && state.days[d].meals[session.userId];
   const lunch = (rec && rec.lunch) || 0;
   const dinner = (rec && rec.dinner) || 0;
@@ -362,12 +379,16 @@ function tomorrowMealBannerHtml() {
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap; flex:0 0 auto;">
       <button type="button" class="btn" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="turnOnTomorrowMeals()">✓ Turn Both On</button>
-      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="goToMealsForTomorrow()">Customize</button>
-      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 10px; font-size:12.5px;" onclick="dismissTomorrowMealBanner()">Not now</button>
+      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="turnOnTomorrowLunch()">Lunch On</button>
+      <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px;" onclick="turnOnTomorrowDinner()">Dinner On</button>
     </div>
   </div>`;
 }
-async function turnOnTomorrowMeals() {
+// Shared by the three "Turn ... On" banner buttons below — which(es) is an
+// array of 'lunch' and/or 'dinner' to flip on for tomorrow. Same guards
+// (lock check, admin block, increase-allowed check) apply regardless of
+// whether one or both meals are being turned on.
+async function turnOnTomorrowMealTypes(whichList, successMsg) {
   const d = tomorrowStr();
   const memberId = session.userId;
   if (!canEditMealForDate(memberId, d)) {
@@ -385,23 +406,23 @@ async function turnOnTomorrowMeals() {
   if (!state.days[d].meals[memberId]) state.days[d].meals[memberId] = { lunch: 0, dinner: 0 };
   const who = `${memberById(session.userId).name} (${roleLabel(session.role)})`;
   const now = nowTimestamp();
-  state.days[d].meals[memberId].lunch = 1;
-  state.days[d].meals[memberId].dinner = 1;
-  state.days[d].meals[memberId].lunchBy = who;
-  state.days[d].meals[memberId].dinnerBy = who;
-  state.days[d].meals[memberId].lunchAt = now;
-  state.days[d].meals[memberId].dinnerAt = now;
+  whichList.forEach((which) => {
+    state.days[d].meals[memberId][which] = 1;
+    state.days[d].meals[memberId][`${which}By`] = who;
+    state.days[d].meals[memberId][`${which}At`] = now;
+  });
   renderTabContent();
   const ok = await persistDay(d);
-  if (ok) showToast('Tomorrow\'s Lunch and Dinner turned on.', 'success');
+  if (ok) showToast(successMsg, 'success');
 }
-function goToMealsForTomorrow() {
-  mealSelectedDate = tomorrowStr();
-  setTab('meals');
+function turnOnTomorrowMeals() {
+  return turnOnTomorrowMealTypes(['lunch', 'dinner'], 'Tomorrow\'s Lunch and Dinner turned on.');
 }
-function dismissTomorrowMealBanner() {
-  try { localStorage.setItem(tomorrowMealReminderDismissKey(), '1'); } catch (e) {}
-  renderTabContent();
+function turnOnTomorrowLunch() {
+  return turnOnTomorrowMealTypes(['lunch'], 'Tomorrow\'s Lunch turned on.');
+}
+function turnOnTomorrowDinner() {
+  return turnOnTomorrowMealTypes(['dinner'], 'Tomorrow\'s Dinner turned on.');
 }
 // Quick "is my meal on today" glance card for the Dashboard — the only
 // other place this was visible before was your own highlighted row inside
@@ -417,20 +438,49 @@ function todayMealStatusCardHtml() {
     <span class="badge" style="background:${count > 0 ? 'var(--success-bg)' : 'var(--danger-bg)'}; color:${count > 0 ? 'var(--success)' : 'var(--danger)'};">
       ${label}: ${count > 0 ? `ON (${count})` : 'OFF'}
     </span>`;
-  return `<div class="alert-card" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-    <div style="flex:1 1 220px; min-width:0;">
+
+  // Balance side (right column) — this used to be its own separate
+  // "Your balance is negative/low/OK" alert-card underneath. Merged in
+  // here instead: the meal pills on the left only ever use up part of the
+  // row's width, leaving the right side empty (it used to hold the now-
+  // removed Edit button) — so the balance status fills that empty space
+  // instead of taking a whole extra card. Kept deliberately short (a
+  // label + one short line) so it actually fits in that leftover space
+  // instead of wrapping onto its own row.
+  const myBal = myTotalBalance();
+  const myMeals = memberMealCount(session.userId);
+  const myCost = monthMemberMealCost(session.userId, currentMonth);
+  const myExpShare = monthExpenseShare(session.userId, currentMonth);
+  const myPersonalRate = myMeals > 0 ? (myCost + myExpShare) / myMeals : null;
+  const remaining = estimatedRemainingMeals(myPersonalRate);
+
+  let cardClass, balanceHtml;
+  if (myBal < 0) {
+    cardClass = 'alert-card danger';
+    const mealsNote = (remaining !== null && remaining < 0) ? ` · ~${Math.abs(Math.round(remaining))} meals short` : '';
+    balanceHtml = `<b style="color:var(--danger);">⚠ Short ${fmtMoney(Math.abs(myBal))}</b> <span class="small-note">· Deposit soon${mealsNote}</span>`;
+  } else if (myBal < state.settings.lowBalanceWarn) {
+    cardClass = 'alert-card warning';
+    const mealsNote = (remaining !== null && remaining >= 0) ? ` · ~${Math.floor(remaining)} left` : '';
+    balanceHtml = `<b style="color:var(--warning);">⚠ Low ${fmtMoney(myBal)}</b> <span class="small-note">· Top up soon${mealsNote}</span>`;
+  } else {
+    cardClass = 'alert-card success';
+    const mealsNote = (remaining !== null) ? ` · ~${Math.floor(remaining)} meals left` : '';
+    balanceHtml = `<b style="color:var(--success);">✓ ${fmtMoney(myBal)}</b><span class="small-note">${mealsNote}</span>`;
+  }
+
+  return `<div class="${cardClass}" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+    <div style="flex:1 1 160px; min-width:0;">
       <b><i class="fas fa-utensils"></i> Today's Meal</b>
       <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
         ${pill('Lunch', lunch)}
         ${pill('Dinner', dinner)}
       </div>
     </div>
-    <button type="button" class="btn secondary" style="margin-top:0; min-height:0; padding:8px 14px; font-size:12.5px; flex:0 0 auto;" onclick="goToMealsForToday()">Edit</button>
+    <div class="today-meal-balance-col" style="flex:0 0 auto; min-width:0;">
+      ${balanceHtml}
+    </div>
   </div>`;
-}
-function goToMealsForToday() {
-  mealSelectedDate = todayStr();
-  setTab('meals');
 }
 
 function renderDashboard() {
@@ -498,32 +548,6 @@ function renderDashboard() {
   const myCost = monthMemberMealCost(session.userId, currentMonth);
   const myExpShare = monthExpenseShare(session.userId, currentMonth);
   const myPersonalRate = myMeals > 0 ? (myCost + myExpShare) / myMeals : null;
-  const remaining = estimatedRemainingMeals(myPersonalRate);
-  let remainingLine = '';
-  if (remaining !== null) {
-    remainingLine = remaining >= 0 ?
-      `<div class="small-note" style="margin-top:6px;">🍽️ At your personal meal rate (${fmtMoney(myPersonalRate)}/meal), your balance covers about <b>${Math.floor(remaining)}</b> more meals.</div>` :
-      `<div class="small-note" style="margin-top:6px;">🍽️ Your balance is already short by the equivalent of <b>${Math.abs(Math.round(remaining))}</b> meals — please deposit before adding new meals.</div>`;
-  }
-  let banner = '';
-  if (myBal < 0) {
-    banner = `<div class="alert-card danger">
-      <b style="color:var(--danger);">⚠ Your balance is negative</b>
-      <div style="margin-top:4px;">Your account is short by <span class="mono neg">${fmtMoney(Math.abs(myBal))}</span>. Please deposit as soon as possible.</div>
-      ${remainingLine}
-    </div>`;
-  } else if (myBal < state.settings.lowBalanceWarn) {
-    banner = `<div class="alert-card warning">
-      <b style="color:var(--warning);">⚠ Balance running low</b>
-      <div style="margin-top:4px;">Your account has only <span class="mono">${fmtMoney(myBal)}</span> left. Consider topping up.</div>
-      ${remainingLine}
-    </div>`;
-  } else {
-    banner = `<div class="alert-card success">
-      <b style="color:var(--success);">Your balance looks good</b>
-      ${remainingLine}
-    </div>`;
-  }
   const myMonthlyExpense = myCost + myExpShare;
   const myBalFmt = myBal >= 0 ? `<span class="pos">${fmtMoney(myBal)}</span>` : `<span class="neg">-${fmtMoney(Math.abs(myBal))}</span>`;
   const myRateBreakdown = `This month's meal cost ${fmtMoney(myCost)} + your expense share ${fmtMoney(myExpShare)} = ${fmtMoney(myCost+myExpShare)} ÷ ${myMeals} meals`;
@@ -653,7 +677,6 @@ function renderDashboard() {
   return `
     ${tomorrowMealBannerHtml()}
     ${todayMealStatusCardHtml()}
-    ${banner}
     ${marketBox}
     ${myStatsCard}
     ${totalExpenseCard}
@@ -1147,9 +1170,14 @@ async function submitAssignDuty() {
    confirmed marketCompletions entry for their date. */
 function computeScheduleWeekStats(list) {
   const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(now.getDate() - now.getDay());
+  // BD week start, not the device's own local week — same reasoning as
+  // nextMarketInfo() above: this feeds a lookup of that BD date's
+  // marketCompletions entry, so it needs to land on the same calendar date
+  // the reminder/completion system used, regardless of the viewer's own
+  // timezone.
+  const bd = getBDNowParts();
+  const weekStart = new Date(Date.UTC(bd.year, bd.month - 1, bd.day));
+  weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
   let thisWeekDuties = 0,
     completedThisWeek = 0,
     upcoming24h = 0;
@@ -1159,8 +1187,8 @@ function computeScheduleWeekStats(list) {
     const mealTypes = mealTypesForShift(m.marketShift);
     thisWeekDuties += mealTypes.length;
     const occDate = new Date(weekStart);
-    occDate.setDate(weekStart.getDate() + Number(m.marketDay));
-    const dateStr = `${occDate.getFullYear()}-${String(occDate.getMonth()+1).padStart(2,'0')}-${String(occDate.getDate()).padStart(2,'0')}`;
+    occDate.setUTCDate(weekStart.getUTCDate() + Number(m.marketDay));
+    const dateStr = `${occDate.getUTCFullYear()}-${String(occDate.getUTCMonth()+1).padStart(2,'0')}-${String(occDate.getUTCDate()).padStart(2,'0')}`;
     mealTypes.forEach(mt => {
       const c = getMarketCompletion(m, dateStr, mt);
       if (c && c.status === 'completed') completedThisWeek++;

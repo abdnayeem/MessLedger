@@ -93,7 +93,13 @@ let expensesSort = {
 // exactly, so both lists behave identically. Purely a display-windowing
 // concern over the already-filtered/sorted `list`; doesn't touch search,
 // sort, or the underlying data.
-const EXPENSES_PAGE_SIZE = 10;
+// Set to a very large number (not Infinity — (page-1)*Infinity is NaN when
+// page is 1, which breaks pageStart/pageEnd below) so a whole month's (or
+// "All Time"'s) records always show on one page — no page-2/3 split, no
+// pagination widget (the existing totalPages > 1 guard below hides it
+// automatically once there's only ever one page). Mirrors COSTS_PAGE_SIZE
+// in 13-costs.js.
+const EXPENSES_PAGE_SIZE = 1000000;
 let expensesPage = 1;
 
 function setExpensesPage(page) {
@@ -166,6 +172,7 @@ function expenseMethodLabel(splitType, mealTypeSplit, isEveryoneFallback) {
 
 function renderExpenses() {
   const canDelete = session.role === 'superadmin';
+  const canAdd = session.role === 'admin' || session.role === 'superadmin';
   const memberChecks = state.members.map(m => `
     <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#33455e; margin:5px 0; font-weight:500;">
       <input type="checkbox" class="exp-member-check" value="${m.id}" ${expFormDraft.checkedMembers.includes(m.id)?'checked':''} onchange="toggleExpDraftMember('${m.id}', this.checked)"> ${escapeHtml(m.name)}
@@ -274,18 +281,15 @@ function renderExpenses() {
     <th class="cl-th sortable-th" onclick="setExpensesSort('purchasedBy')">Purchased By${expensesSortArrowHtml('purchasedBy')}</th>
     <th class="cl-th"></th></tr>`;
 
-  // Pagination footer — dynamically built from the current filtered list, never hardcoded. Mirrors renderCosts().
-  const pageNums = expensesPageWindow(expensesPage, totalPages);
+  // Pagination footer — kept to a plain "Showing X of Y" line only. The
+  // actual page-number/prev-next buttons were removed entirely (not just
+  // hidden) since EXPENSES_PAGE_SIZE is now large enough that there's never
+  // a second page to navigate to — keeping dead prev/next buttons around
+  // just to immediately disable them serves no purpose. Mirrors
+  // renderCosts().
   const paginationHtml = `
     <div class="cl-pagination">
       <div class="cl-pagination-info">${list.length === 0 ? 'Showing 0 of 0 entries' : `Showing ${pageStart + 1} to ${pageEnd} of ${list.length} entries`}</div>
-      <div class="cl-pagination-pages">
-        <button class="cl-page-btn" onclick="setExpensesPage(1)" ${expensesPage<=1?'disabled':''} title="First page">«</button>
-        <button class="cl-page-btn" onclick="setExpensesPage(${Math.max(1,expensesPage-1)})" ${expensesPage<=1?'disabled':''} title="Previous page">‹</button>
-        ${pageNums.map(p => `<button class="cl-page-btn ${p===expensesPage?'cl-page-active':''}" onclick="setExpensesPage(${p})">${p}</button>`).join('')}
-        <button class="cl-page-btn" onclick="setExpensesPage(${Math.min(totalPages,expensesPage+1)})" ${expensesPage>=totalPages?'disabled':''} title="Next page">›</button>
-        <button class="cl-page-btn" onclick="setExpensesPage(${totalPages})" ${expensesPage>=totalPages?'disabled':''} title="Last page">»</button>
-      </div>
     </div>`;
 
   return `
@@ -611,7 +615,7 @@ function renderExpenses() {
         .cl-pagination { flex-direction:column; align-items:flex-start; }
       }
     </style>
-    <div class="card">
+    ${canAdd ? `<div class="card">
       <div class="aeh-top-row">
         <div class="aeh-header">
           <div class="aeh-icon-box">
@@ -752,7 +756,7 @@ function renderExpenses() {
           <p>"Purchased By" defaults to that date's scheduled market-duty member when relevant, but change it if someone else actually paid.</p>
         </div>
       </div>
-    </div>
+    </div>` : ''}
     <div class="card keep-native-tables">
       <div class="cl-header">
         <div class="cl-header-left">

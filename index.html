@@ -286,8 +286,51 @@
   // Runs after full load so it never competes with the app's own boot
   // work for bandwidth/CPU on first paint.
   if ('serviceWorker' in navigator) {
+    // Captured BEFORE registration resolves: true only if this page load
+    // was already controlled by a previously-installed SW (a normal return
+    // visit). On a brand new install (or a load that bypassed the SW,
+    // like a hard refresh) this is false, and the very first
+    // 'controllerchange' that follows just means "the SW is taking
+    // control for the first time" — not a real update — so it must not
+    // trigger the "new version available" prompt below.
+    var hadController = !!navigator.serviceWorker.controller;
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function (err) {
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        // BUGFIX (mobile "icons never load until hard refresh"): a hard
+        // refresh on desktop bypasses the SW + HTTP cache and forces a
+        // fresh navigation, which is also the main way this SW's fetch
+        // handler gets a chance to fully catch up (see sw.js's own
+        // BUGFIX comments on the fetch handler). Mobile browsers have no
+        // hard-refresh gesture, and a PWA opened from the home screen (or
+        // a background browser tab) can sit for days without ever making
+        // a fresh navigation, so a deploy could go unnoticed indefinitely.
+        // Two pieces close that gap:
+
+        // 1) Explicitly re-check for a new SW whenever the app becomes
+        //    visible again (foregrounding a backgrounded tab/PWA is NOT
+        //    guaranteed to trigger the browser's own update check the way
+        //    a real navigation does).
+        document.addEventListener('visibilitychange', function () {
+          if (!document.hidden) reg.update().catch(function () {});
+        });
+
+        // 2) sw.js calls self.skipWaiting() + clients.claim()
+        //    automatically, so a new SW takes control of this page
+        //    in-session without waiting for a message — but nothing else
+        //    reloads the page, so old JS/CSS/icons keep running until it
+        //    does. Prompt instead of silently reloading, so nobody loses
+        //    in-progress form input (this is a ledger app).
+        var alreadyPrompted = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (alreadyPrompted) return;
+          alreadyPrompted = true;
+          if (typeof showUpdateAvailableToast === 'function') {
+            showUpdateAvailableToast();
+          } else {
+            window.location.reload();
+          }
+        });
+      }).catch(function (err) {
         console.warn('Service worker registration failed:', err);
       });
     });

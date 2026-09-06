@@ -602,8 +602,17 @@ async function loadLogs() {
 // sync.js) — close enough to real-time for an in-app bell, without paying
 // for a live listener that fires on every signed-in member's every action.
 async function loadNotifications() {
-  const res = await logStorage.getByPrefix(PFX_NOTIF, true);
-  let fresh = (res.items || []).map(it => JSON.parse(it.value));
+  const [notifRes, dismissRes] = await Promise.all([
+    logStorage.getByPrefix(PFX_NOTIF, true),
+    // See the BUGFIX comment above PFX_DISMISS in 01-notifications.js:
+    // this is what lets a dismissal made on one device stop a recurring
+    // check running on ANOTHER device from recreating the same reminder.
+    logStorage.getByPrefix(PFX_DISMISS, true).catch(e => {
+      console.error('loading dismissed dedupeKeys failed:', e);
+      return { items: [] };
+    })
+  ]);
+  let fresh = (notifRes.items || []).map(it => JSON.parse(it.value));
   // Same race guard the old live-listener path used (see
   // deleteNotificationDoc() in 03-persistence.js): don't let a fetch that
   // started before a local "mark as read" delete has confirmed bring an
@@ -612,6 +621,9 @@ async function loadNotifications() {
     fresh = fresh.filter(n => !_pendingDeletedNotifIds.has(n.id));
   }
   state.notifications = fresh.sort((a, b) => b.createdAt - a.createdAt);
+  if (typeof _serverDismissedDedupeKeys !== 'undefined') {
+    (dismissRes.items || []).forEach(it => _serverDismissedDedupeKeys.add(it.key.slice(PFX_DISMISS.length)));
+  }
   _notifBaselineLoaded = true; // safe for checkLowBalance/MarketDuty/MealEditReminders to dedupe against this now
 }
 // BUGFIX (full-collection read for every visitor, even ones who never log
@@ -716,4 +728,3 @@ async function loadState() {
   writeLocalCache(s);
   return s;
 }
-

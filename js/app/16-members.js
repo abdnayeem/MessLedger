@@ -32,7 +32,7 @@ function renderMembers() {
       <div class="mrow-member">
         <div class="member-avatar ${memberAvatarClass(m.id)}" title="${roleLabelFor[m.role]}">${initials}</div>
         <div class="mrow-member-fields">
-          <input type="text" class="member-name-input" value="${m.name}" placeholder="Name" onchange="updateMemberField('${m.id}','name', this.value.trim())">
+          <input type="text" class="member-name-input" value="${escapeHtml(m.name)}" placeholder="Name" onchange="updateMemberField('${m.id}','name', this.value.trim())">
           <select class="role-select role-${m.role}" onchange="changeRole('${m.id}', this.value)">
             <option value="member" ${m.role==='member'?'selected':''}>Member</option>
             <option value="admin" ${m.role==='admin'?'selected':''}>Admin</option>
@@ -43,7 +43,7 @@ function renderMembers() {
       <div class="mrow-cell mrow-phone">
         <span class="mrow-cell-label">Phone</span>
         <div class="mrow-phone-inner">
-          ${phoneDigits ? `<a class="phone-call-btn" href="tel:${phoneDigits}" title="Call ${m.name}"><i class="fas fa-phone"></i></a>` : `<span class="phone-call-btn is-disabled" title="No phone on file"><i class="fas fa-phone"></i></span>`}
+          ${phoneDigits ? `<a class="phone-call-btn" href="tel:${phoneDigits}" title="Call ${escapeHtml(m.name)}"><i class="fas fa-phone"></i></a>` : `<span class="phone-call-btn is-disabled" title="No phone on file"><i class="fas fa-phone"></i></span>`}
           <input type="text" value="${m.phone||''}" placeholder="Phone" inputmode="tel" onchange="updateMemberField('${m.id}','phone', this.value.trim())">
         </div>
       </div>
@@ -126,7 +126,7 @@ function renderMembers() {
         ${state.members.map(m=>`
         <label class="active-list-row">
           <span class="active-list-info">
-            <span class="active-list-name" title="${m.name}">${m.name}</span>
+            <span class="active-list-name" title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</span>
             <span class="badge ${m.role}">${roleLabel(m.role)}</span>
           </span>
           <input type="checkbox" class="ma-member-check" value="${m.id}" ${isMemberActiveInMonth(m.id, monthlyActiveSelectedMonth) ? 'checked' : ''}>

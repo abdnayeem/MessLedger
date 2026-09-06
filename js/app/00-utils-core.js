@@ -314,6 +314,43 @@ function showUndoToast(message, onUndo, onCommit) {
   });
 }
 
+/* ---------------- UPDATE-AVAILABLE TOAST ----------------
+   Shown once a new service worker has taken control of the page (see the
+   'controllerchange' listener in index.html). Unlike showToast(), this one
+   does NOT auto-dismiss — a missed update prompt just means the user is one
+   tap away from stale icons/JS again, so it stays up until acted on. Reuses
+   the same visual family as showUndoToast() (message + action button) but
+   the button reloads the page instead of undoing anything.
+   This is the fix for "hard refresh fixes it on PC but there's no hard
+   refresh on mobile": PC users stumble into a real reload/hard-refresh
+   often enough that a fresh service worker's assets get picked up; mobile
+   users can leave a tab/PWA open for days without ever navigating again, so
+   nothing here ever prompted them to reload — this toast is that prompt. */
+function showUpdateAvailableToast() {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const el = document.createElement('div');
+  el.className = 'toast toast-success toast-undo';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'toast-undo-msg';
+  msgSpan.textContent = 'New version available';
+
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'toast-undo-btn';
+  refreshBtn.textContent = 'Refresh';
+  refreshBtn.addEventListener('click', () => window.location.reload());
+
+  el.appendChild(msgSpan);
+  el.appendChild(refreshBtn);
+  container.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+}
+
 /* ---------------- SUCCESS CHECK (iPhone-payment-style confirmation) ----------------
    Used for the money-affecting inputs (grocery cost, deposit, withdrawal) instead of
    the plain toast — a brief full-screen checkmark confirmation, same idea as an Apple

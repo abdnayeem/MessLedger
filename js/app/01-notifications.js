@@ -35,11 +35,28 @@ let _notifBaselineLoaded = false;
 // still low, still your market day, etc.) hadn't changed. One-off
 // notifications (deposit/expense/cost — dedupeKey includes a unique
 // record id) are unaffected either way since that exact dedupeKey can
-// never legitimately recur. Kept in localStorage rather than Firestore —
-// it only needs to suppress recreation on this device for the rest of
-// today; briefly re-seeing a dismissed reminder on a different device is
-// harmless and self-resolves once read there too.
+// never legitimately recur.
+//
+// BUGFIX (cross-device reappearance): these recurring checks run from
+// WHOEVER'S device happens to have the app open when the scheduler ticks
+// (see runScheduledNotificationChecks()/startNotificationScheduler() in
+// 05-session-sync.js) — not just the affected member's own device. So if,
+// say, the super admin's laptop stays open, its own scheduler tick can
+// recreate "you're on market duty today" for a member who already read
+// and cleared it on their phone minutes earlier — because the dismiss
+// record only lived in that phone's localStorage, and the laptop has no
+// way to know about it, so it goes ahead and re-adds the same reminder.
+// Fixed by ALSO persisting dismissed dedupeKeys as tiny docs in Firestore
+// (PFX_DISMISS, same pattern as notifications themselves), loaded into
+// _serverDismissedDedupeKeys every time loadNotifications() runs (login,
+// bell-open, and once a minute) — so every device shares the same
+// "already dismissed" list, not just the one that did the dismissing.
+// localStorage is kept too, as an instant local check for THIS device,
+// since the Firestore round trip for a fresh dismissal here may not have
+// resolved yet by the very next render.
 const DISMISSED_DEDUPE_KEYS_LS = 'meedger_dismissedDedupeKeys';
+const PFX_DISMISS = 'meal-app-dismissedkey__';
+let _serverDismissedDedupeKeys = new Set();
 function _readDismissedDedupeKeys() {
   try {
     return new Set(JSON.parse(localStorage.getItem(DISMISSED_DEDUPE_KEYS_LS) || '[]'));
@@ -47,15 +64,24 @@ function _readDismissedDedupeKeys() {
     return new Set();
   }
 }
+function _isDedupeKeyDismissed(dedupeKey) {
+  return _readDismissedDedupeKeys().has(dedupeKey) || _serverDismissedDedupeKeys.has(dedupeKey);
+}
 function _rememberDismissedDedupeKey(dedupeKey) {
   if (!dedupeKey) return;
+  _serverDismissedDedupeKeys.add(dedupeKey); // instant, in-memory, so THIS device is correct right away
   try {
     const set = _readDismissedDedupeKeys();
     set.add(dedupeKey);
     // Cap so this can't grow forever — far more than a household mess
     // will ever generate; we only actually need "recent" entries anyway.
     localStorage.setItem(DISMISSED_DEDUPE_KEYS_LS, JSON.stringify(Array.from(set).slice(-500)));
-  } catch (e) { /* localStorage unavailable — worst case is the old recreate-on-next-render behavior */ }
+  } catch (e) { /* localStorage unavailable — the Firestore copy below still protects other devices */ }
+  // Fire-and-forget — a background "don't recreate this" marker shouldn't
+  // block the caller (marking a notification read should feel instant).
+  if (typeof logStorage !== 'undefined') {
+    logStorage.set(PFX_DISMISS + dedupeKey, '1', true).catch(e => console.error('persist dismissed dedupeKey failed:', e));
+  }
 }
 
 function getUserNotifications(userId) {
@@ -95,7 +121,7 @@ function addNotification(userId, opts) {
   const message = (opts.message || '').trim() || '';
   const dedupeKey = opts.dedupeKey || `${type}::${title}::${message}`;
   if (state.notifications.some(n => n.memberId === userId && n.dedupeKey === dedupeKey)) return; // duplicate — skip
-  if (_readDismissedDedupeKeys().has(dedupeKey)) return; // already read/dismissed today — see the comment on DISMISSED_DEDUPE_KEYS_LS above
+  if (_isDedupeKeyDismissed(dedupeKey)) return; // already read/dismissed today, on this or another device — see the comment on DISMISSED_DEDUPE_KEYS_LS above
   const notif = {
     id: 'n' + Date.now() + Math.random().toString(36).slice(2, 8),
     memberId: userId,
