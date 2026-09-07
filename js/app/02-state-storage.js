@@ -651,9 +651,24 @@ async function loadNotifications() {
 // only gets opened once someone actually has a session — see enterAppFull()
 // below and doLogin()'s success path.
 async function fetchLoginScreenState() {
+  // PERF: fire all 4 reads at once instead of waiting for KEY_MEMBERS to
+  // finish before starting the other 3 — they don't depend on each other,
+  // so there's no reason for the round-trips to be sequential. The other 3
+  // already have their own .catch() attached (so they're "handled" the
+  // moment they're created, regardless of whether this function later
+  // abandons them for the loadState() fallback below), which is what makes
+  // it safe to kick them off before knowing whether membersRes succeeds.
+  const membersPromise = storage.get(KEY_MEMBERS, true);
+  const metaPromise = storage.get(KEY_META, true).catch(() => null);
+  const settingsPromise = storage.get(KEY_SETTINGS, true).catch(() => null);
+  const monthlyPromise = (typeof storage.getByPrefix === 'function'
+    ? storage.getByPrefix(PFX_MONTHLYACTIVE, true)
+    : Promise.resolve({ items: [] })
+  ).catch(() => ({ items: [] }));
+
   let membersRes;
   try {
-    membersRes = await storage.get(KEY_MEMBERS, true);
+    membersRes = await membersPromise;
   } catch (e) {
     // BUGFIX: a mess that hasn't finished migrating from the old
     // single-document format yet has no KEY_MEMBERS per-item doc at all —
@@ -665,14 +680,7 @@ async function fetchLoginScreenState() {
     // rare/one-time, not the normal case.
     return await loadState();
   }
-  const [metaRes, settingsRes, monthlyRes] = await Promise.all([
-    storage.get(KEY_META, true).catch(() => null),
-    storage.get(KEY_SETTINGS, true).catch(() => null),
-    (typeof storage.getByPrefix === 'function'
-      ? storage.getByPrefix(PFX_MONTHLYACTIVE, true)
-      : Promise.resolve({ items: [] })
-    ).catch(() => ({ items: [] }))
-  ]);
+  const [metaRes, settingsRes, monthlyRes] = await Promise.all([metaPromise, settingsPromise, monthlyPromise]);
   const s = {
     members: JSON.parse(membersRes.value),
     settings: settingsRes ? JSON.parse(settingsRes.value) : defaultSettings(),

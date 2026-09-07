@@ -28,7 +28,14 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <title>MessLedger</title>
+<!-- BUGFIX (perf): fonts.googleapis.com only serves the @font-face CSS —
+     the actual font files it points to load from fonts.gstatic.com, a
+     different origin. Without preconnecting that one too, the browser only
+     discovers it needs a connection there after downloading and parsing
+     the CSS from googleapis.com first, adding a full DNS+TCP+TLS
+     round-trip of delay before the custom fonts can start loading. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
